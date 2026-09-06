@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS categories (
+    id BIGSERIAL PRIMARY KEY,
+
+    name VARCHAR(100) NOT NULL UNIQUE,
+
+    description TEXT,
+
+    image_url TEXT,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
