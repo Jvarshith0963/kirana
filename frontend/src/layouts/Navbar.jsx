@@ -1,63 +1,82 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
-  return (
-    <nav className="bg-white px-8 py-4 shadow-md">
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  return (
+    <nav className="sticky top-0 z-50 border-b bg-white shadow-md">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
 
         {/* Logo */}
         <Link
           to="/"
-          className="text-2xl font-bold text-green-700"
+          className="text-xl font-bold text-green-700"
         >
           🛒 Kirana Marketplace
         </Link>
 
-        {/* Navigation */}
-        <div className="flex items-center gap-6">
+        {/* Navigation Buttons */}
+        <div className="flex items-center gap-3">
 
+          {/* Home */}
           <Link
             to="/"
-            className="font-medium text-gray-700 hover:text-green-600"
+            className="rounded-lg px-4 py-2 font-medium text-gray-700 transition hover:bg-green-100 hover:text-green-700"
           >
-            Home
+            🏠 Home
           </Link>
 
-          <Link
-            to="/products"
-            className="font-medium text-gray-700 hover:text-green-600"
-          >
-            Products
-          </Link>
-
+          {/* Cart */}
           <Link
             to="/cart"
-            className="font-medium text-gray-700 hover:text-green-600"
+            className="rounded-lg px-4 py-2 font-medium text-gray-700 transition hover:bg-green-100 hover:text-green-700"
           >
             🛒 Cart
           </Link>
 
+          {/* Profile */}
+          <Link
+            to="/profile"
+            className="rounded-lg px-4 py-2 font-medium text-gray-700 transition hover:bg-green-100 hover:text-green-700"
+          >
+            👤 Profile
+          </Link>
+
+          {/* Vendor */}
           <Link
             to="/vendor"
-            className="font-medium text-gray-700 hover:text-green-600"
+            className="rounded-lg px-4 py-2 font-medium text-gray-700 transition hover:bg-green-100 hover:text-green-700"
           >
-            Vendor
+            🏪 Vendor
           </Link>
 
+          {/* Admin */}
           <Link
             to="/admin"
-            className="font-medium text-gray-700 hover:text-green-600"
+            className="rounded-lg px-4 py-2 font-medium text-gray-700 transition hover:bg-green-100 hover:text-green-700"
           >
-            Admin
+            ⚙️ Admin
           </Link>
 
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white transition hover:bg-red-700"
+          >
+            🚪 Logout
+          </button>
+
         </div>
-
       </div>
-
     </nav>
-  )
+  );
 }
 
-export default Navbar
+export default Navbar;
