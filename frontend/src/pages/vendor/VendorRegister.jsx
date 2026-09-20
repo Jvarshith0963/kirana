@@ -91,50 +91,53 @@ function VendorRegister() {
   ================================= */
 
   const onSubmit = async (data) => {
-    setServerError("");
-    setSuccessMessage("");
+  setServerError("");
+  setSuccessMessage("");
 
-    try {
-      /*
-       * TEMPORARY FRONTEND TEST
-       *
-       * This will later be replaced with
-       * Varshith's real vendor registration API.
-       */
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/auth/register",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          role: "vendor",
+          phone: data.phone,
+          storeName: data.storeName,
+          address: data.address,
+        }),
+      }
+    );
 
-      console.log("Vendor registration data:", data);
+    const result = await response.json();
 
-      const testVendor = {
-        id: Date.now(),
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        storeName: data.storeName,
-        address: data.address,
-        role: "vendor",
-      };
-
-      const testToken = "frontend-vendor-test-token";
-
-      login(testVendor, testToken);
-
-      setSuccessMessage(
-        "Vendor account created successfully!"
-      );
-
-      setTimeout(() => {
-        navigate("/vendor");
-      }, 1000);
-
-    } catch (error) {
-      console.error("Vendor registration error:", error);
-
-      setServerError(
-        "Vendor registration failed. Please try again."
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Vendor registration failed"
       );
     }
-  };
 
+    setSuccessMessage(
+      "Vendor account created successfully! Please login."
+    );
+
+    setTimeout(() => {
+      navigate("/vendor/login");
+    }, 1000);
+  } catch (error) {
+    console.error("Vendor registration error:", error);
+
+    setServerError(
+      error.message ||
+        "Vendor registration failed. Please try again."
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">

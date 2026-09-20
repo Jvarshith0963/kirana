@@ -58,34 +58,58 @@ function ResetPassword() {
      SUBMIT RESET PASSWORD
   ================================= */
 
-  const onSubmit = async (data) => {
-    setServerError("");
-    setSuccessMessage("");
+ const onSubmit = async (data) => {
+  setServerError("");
+  setSuccessMessage("");
 
-    try {
-      // TEMPORARY FRONTEND TEST
-      // This will be replaced with Varshith's
-      // actual backend reset-password API.
+  try {
+    const token = new URLSearchParams(
+      window.location.search
+    ).get("token");
 
-      console.log("Reset password token:", token);
-      console.log("New password:", data.password);
+    if (!token) {
+      throw new Error("Invalid or missing reset token");
+    }
 
-      setSuccessMessage(
-        "Password reset successfully! Redirecting to login..."
-      );
+    const response = await fetch(
+      "http://localhost:5000/api/auth/reset-password",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token,
+          newPassword: data.password,
+        }),
+      }
+    );
 
-      setTimeout(() => {
-        navigate("/login");
-      }, 1500);
+    const result = await response.json();
 
-    } catch (error) {
-      console.error("Reset password error:", error);
-
-      setServerError(
-        "Unable to reset password. Please try again."
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Password reset failed"
       );
     }
-  };
+
+    setSuccessMessage(
+      result.message ||
+        "Password reset successfully. Please login."
+    );
+
+    setTimeout(() => {
+      navigate("/login");
+    }, 1500);
+  } catch (error) {
+    console.error("Reset password error:", error);
+
+    setServerError(
+      error.message ||
+        "Password reset failed. Please try again."
+    );
+  }
+};
 
 
   return (

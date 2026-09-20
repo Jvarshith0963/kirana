@@ -4,6 +4,44 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "../../context/AuthContext";
+import { GoogleLogin } from "@react-oauth/google";
+
+
+/* =================================
+   API HELPERS
+================================= */
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+async function postJson(path, body) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  let result = {};
+
+  try {
+    result = await response.json();
+  } catch {
+    /* response was not JSON */
+  }
+
+  if (!response.ok) {
+    throw new Error(result.message || "Request failed");
+  }
+
+  return result;
+}
+
+const getErrorMessage = (error, fallback) =>
+  error instanceof TypeError
+    ? "Cannot reach the server. Is the backend running?"
+    : error.message || fallback;
 
 
 /* =================================
@@ -64,26 +102,18 @@ function Login() {
     setServerError("");
 
     try {
-      /*
-       * TEMPORARY FRONTEND LOGIN
-       *
-       * This will be replaced with Varshith's
-       * real backend login API later.
-       */
-
-      console.log("Login data:", data);
-
-      const testUser = {
-        id: 1,
-        name: "Test Customer",
+      const result = await postJson("/auth/login", {
         email: data.email,
-        phone: "9876543210",
-        role: "customer",
-      };
+        password: data.password,
+      });
 
-      const testToken = "frontend-test-jwt-token";
-
-      login(testUser, testToken);
+      // Backend returns { token, user }.
+      // accessToken / refreshToken are also supported if you add them later.
+      login(
+        result.user,
+        result.accessToken ?? result.token,
+        result.refreshToken
+      );
 
       navigate("/");
 
@@ -91,7 +121,10 @@ function Login() {
       console.error("Login error:", error);
 
       setServerError(
-        "Login failed. Please check your email and password."
+        getErrorMessage(
+          error,
+          "Login failed. Please check your email and password."
+        )
       );
     }
   };
@@ -101,17 +134,29 @@ function Login() {
      GOOGLE LOGIN
   ================================= */
 
-  const handleGoogleLogin = () => {
-    /*
-     * TEMPORARY FRONTEND TEST
-     *
-     * Real Google OAuth will be connected
-     * to Varshith's backend later.
-     */
+  const handleGoogleLogin = async (credentialResponse) => {
+    setServerError("");
 
-    alert(
-      "Google Login will be connected to the backend."
-    );
+    try {
+      const result = await postJson("/auth/google", {
+        idToken: credentialResponse.credential,
+      });
+
+      login(
+        result.user,
+        result.accessToken ?? result.token,
+        result.refreshToken
+      );
+
+      navigate("/");
+
+    } catch (error) {
+      console.error("Google login error:", error);
+
+      setServerError(
+        getErrorMessage(error, "Google login failed")
+      );
+    }
   };
 
 
@@ -291,17 +336,17 @@ function Login() {
               GOOGLE LOGIN
           ================================= */}
 
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            className="mt-3 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 py-3 font-semibold text-gray-700 transition hover:bg-gray-50"
-          >
-            <span className="text-xl font-bold">
-              G
-            </span>
+          <div className="mt-3 flex justify-center">
 
-            Continue with Google
-          </button>
+            <GoogleLogin
+              onSuccess={handleGoogleLogin}
+              onError={() => {
+                console.error("Google Login Failed");
+                setServerError("Google login failed. Please try again.");
+              }}
+            />
+
+          </div>
 
 
           {/* =================================

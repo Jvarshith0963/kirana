@@ -27,23 +27,44 @@ function ForgotPassword() {
   });
 
   const onSubmit = async (data) => {
-    setServerError("");
-    setSuccessMessage("");
+  setServerError("");
+  setSuccessMessage("");
 
-    try {
-      // TEMPORARY FRONTEND TEST
-      // This will be replaced with Varshith's backend API later.
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/auth/forgot-password",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: data.email,
+        }),
+      }
+    );
 
-      console.log("Forgot password request:", data);
+    const result = await response.json();
 
-      setSuccessMessage(
-        "If an account exists with this email, a password reset link will be sent."
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Failed to send reset link"
       );
-    } catch (error) {
-      console.error("Forgot password error:", error);
-      setServerError("Something went wrong. Please try again.");
     }
-  };
+
+    setSuccessMessage(
+      result.message ||
+        "If your email is registered, a reset link has been sent."
+    );
+  } catch (error) {
+    console.error("Forgot password error:", error);
+
+    setServerError(
+      error.message ||
+        "Something went wrong. Please try again."
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">

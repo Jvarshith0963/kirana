@@ -70,44 +70,52 @@ function Register() {
   // Form Submit
   // ================================
 
-  const onSubmit = async (data) => {
-    setServerError("");
-    setSuccessMessage("");
+ const onSubmit = async (data) => {
+  setServerError("");
+  setSuccessMessage("");
 
-    try {
-      /*
-       * TEMPORARY FRONTEND TEST
-       *
-       * Later this will be replaced with
-       * Varshith's real backend register API.
-       */
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/auth/register",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          role: "customer",
+          phone: data.phone,
+        }),
+      }
+    );
 
-      const testUser = {
-        id: Date.now(),
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        role: "customer",
-      };
+    const result = await response.json();
 
-      const testToken = "frontend-test-jwt-token";
-
-      // Save user and token
-      login(testUser, testToken);
-
-      setSuccessMessage("Account created successfully!");
-
-      // Redirect to Home
-      setTimeout(() => {
-        navigate("/");
-      }, 800);
-    } catch (error) {
-      console.error("Registration error:", error);
-      setServerError(
-        "Registration failed. Please try again."
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Registration failed"
       );
     }
-  };
+
+    setSuccessMessage(
+      "Account created successfully! Please login."
+    );
+
+    setTimeout(() => {
+      navigate("/login");
+    }, 1000);
+  } catch (error) {
+    console.error("Registration error:", error);
+
+    setServerError(
+      error.message ||
+        "Registration failed. Please try again."
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">

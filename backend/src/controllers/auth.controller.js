@@ -19,32 +19,71 @@ const googleClient = new OAuth2Client(
 
 
 
-async function createRoleProfile(client, userId, role) {
-  if (role === 'customer') {
+async function createRoleProfile(
+  client,
+  userId,
+  role,
+  vendorData = {}
+) {
+  if (role === "customer") {
     await client.query(
-      `INSERT INTO customers (user_id) VALUES ($1)`,
+      `INSERT INTO customers (user_id)
+       VALUES ($1)`,
       [userId]
     );
-  } else if (role === 'vendor') {
+  } else if (role === "vendor") {
+    const {
+      storeName,
+      address,
+      phone,
+    } = vendorData;
+
+    if (!storeName || !address) {
+      throw new Error(
+        "Store name and address are required for vendor registration"
+      );
+    }
+
+    const vendorResult = await client.query(
+      `INSERT INTO vendors
+       (user_id, business_name, business_phone)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [
+        userId,
+        storeName,
+        phone || null,
+      ]
+    );
+
+    const vendorId = vendorResult.rows[0].id;
+
     await client.query(
-      `INSERT INTO vendors (user_id) VALUES ($1)`,
-      [userId]
+      `INSERT INTO stores
+       (vendor_id, store_name, address)
+       VALUES ($1, $2, $3)`,
+      [
+        vendorId,
+        storeName,
+        address,
+      ]
     );
   }
-  // Admins are typically created manually/seeded, not via public register.
 }
-
-function sanitizeUser(user) {
-  const { password_hash, ...safe } = user;
-  return safe;
-}
-
 // ---------------------------------------------------------------------------
 // POST /api/auth/register
 // body: { name, email, password, role, phone }
 // ---------------------------------------------------------------------------
 async function register(req, res) {
-  const { name, email, password, role, phone } = req.body;
+  const {
+  name,
+  email,
+  password,
+  role,
+  phone,
+  storeName,
+  address,
+} = req.body;
 
   if (!name || !email || !password || !role) {
     return res.status(400).json({ message: 'name, email, password and role are required' });
@@ -75,7 +114,16 @@ async function register(req, res) {
     );
     const user = insertResult.rows[0];
 
-    await createRoleProfile(client, user.id, role);
+    await createRoleProfile(
+  client,
+  user.id,
+  role,
+  {
+    storeName,
+    address,
+    phone,
+  }
+);
 
     await client.query('COMMIT');
 

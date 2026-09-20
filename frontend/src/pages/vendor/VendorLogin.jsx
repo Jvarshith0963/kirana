@@ -53,41 +53,54 @@ function VendorLogin() {
   ================================= */
 
   const onSubmit = async (data) => {
-    setServerError("");
+  setServerError("");
 
-    try {
-      /*
-       * TEMPORARY FRONTEND TEST LOGIN
-       *
-       * This will be replaced with Varshith's
-       * actual vendor login API.
-       */
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/auth/login",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+        }),
+      }
+    );
 
-      console.log("Vendor login data:", data);
+    const result = await response.json();
 
-      const testVendor = {
-        id: 1001,
-        name: "Test Vendor",
-        email: data.email,
-        phone: "9876543210",
-        role: "vendor",
-      };
-
-      const testToken = "frontend-vendor-test-token";
-
-      login(testVendor, testToken);
-
-      navigate("/vendor");
-
-    } catch (error) {
-      console.error("Vendor login error:", error);
-
-      setServerError(
-        "Vendor login failed. Please try again."
+    if (!response.ok) {
+      throw new Error(
+        result.message || "Vendor login failed"
       );
     }
-  };
 
+    // Make sure the logged-in account is actually a vendor
+    if (result.user.role !== "vendor") {
+      throw new Error(
+        "This account is not registered as a vendor."
+      );
+    }
+
+    login(
+      result.user,
+      result.accessToken,
+      result.refreshToken
+    );
+
+    navigate("/vendor");
+  } catch (error) {
+    console.error("Vendor login error:", error);
+
+    setServerError(
+      error.message ||
+        "Vendor login failed. Please try again."
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">

@@ -7,6 +7,43 @@ import { useAuth } from "../../context/AuthContext";
 
 
 /* =================================
+   API HELPERS
+================================= */
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+async function postJson(path, body) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  let result = {};
+
+  try {
+    result = await response.json();
+  } catch {
+    /* response was not JSON */
+  }
+
+  if (!response.ok) {
+    throw new Error(result.message || "Request failed");
+  }
+
+  return result;
+}
+
+const getErrorMessage = (error, fallback) =>
+  error instanceof TypeError
+    ? "Cannot reach the server. Is the backend running?"
+    : error.message || fallback;
+
+
+/* =================================
    PHONE VALIDATION
 ================================= */
 
@@ -46,6 +83,7 @@ function OtpLogin() {
   const [phone, setPhone] = useState("");
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [isResending, setIsResending] = useState(false);
 
   /* Phone Form */
 
@@ -90,20 +128,18 @@ function OtpLogin() {
     setSuccessMessage("");
 
     try {
-      /*
-       * TEMPORARY FRONTEND TEST
-       *
-       * Later this will call Varshith's
-       * real backend OTP API.
-       */
+      const result = await postJson("/auth/otp/request", {
+        phone: data.phone,
+      });
 
-      console.log("Send OTP to:", data.phone);
+      // Only returned by the backend outside production
+      if (result.devOtp) {
+        console.log("DEV OTP:", result.devOtp);
+      }
 
       setPhone(data.phone);
 
-      setSuccessMessage(
-        `OTP sent to ${data.phone}`
-      );
+      setSuccessMessage(`OTP sent to ${data.phone}`);
 
       setStep(2);
 
@@ -111,7 +147,10 @@ function OtpLogin() {
       console.error("Send OTP error:", error);
 
       setServerError(
-        "Unable to send OTP. Please try again."
+        getErrorMessage(
+          error,
+          "Unable to send OTP. Please try again."
+        )
       );
     }
   };
@@ -126,39 +165,15 @@ function OtpLogin() {
     setSuccessMessage("");
 
     try {
-      /*
-       * TEMPORARY FRONTEND TEST OTP
-       *
-       * Use 123456 for testing.
-       *
-       * This will later be replaced with
-       * Varshith's real backend verification.
-       */
+      const result = await postJson("/auth/otp/verify", {
+        phone,
+        otp: data.otp,
+      });
 
-      console.log("OTP entered:", data.otp);
+      // result = { token, user }
+      login(result.user, result.token);
 
-      if (data.otp !== "123456") {
-        setServerError(
-          "Invalid OTP. For frontend testing, use 123456."
-        );
-        return;
-      }
-
-      const testUser = {
-        id: 2001,
-        name: "OTP Customer",
-        email: "",
-        phone: phone,
-        role: "customer",
-      };
-
-      const testToken = "frontend-otp-test-token";
-
-      login(testUser, testToken);
-
-      setSuccessMessage(
-        "OTP verified successfully!"
-      );
+      setSuccessMessage("OTP verified successfully!");
 
       setTimeout(() => {
         navigate("/");
@@ -168,7 +183,10 @@ function OtpLogin() {
       console.error("OTP verification error:", error);
 
       setServerError(
-        "OTP verification failed. Please try again."
+        getErrorMessage(
+          error,
+          "OTP verification failed. Please try again."
+        )
       );
     }
   };
@@ -178,15 +196,31 @@ function OtpLogin() {
      RESEND OTP
   ================================= */
 
-  const resendOtp = () => {
+  const resendOtp = async () => {
     setServerError("");
     setSuccessMessage("");
+    setIsResending(true);
 
-    console.log("Resending OTP to:", phone);
+    try {
+      const result = await postJson("/auth/otp/request", {
+        phone,
+      });
 
-    setSuccessMessage(
-      `New OTP sent to ${phone}`
-    );
+      if (result.devOtp) {
+        console.log("DEV OTP:", result.devOtp);
+      }
+
+      setSuccessMessage(`New OTP sent to ${phone}`);
+
+    } catch (error) {
+      console.error("Resend OTP error:", error);
+
+      setServerError(
+        getErrorMessage(error, "Unable to resend OTP.")
+      );
+    } finally {
+      setIsResending(false);
+    }
   };
 
 
@@ -368,9 +402,10 @@ function OtpLogin() {
                 <button
                   type="button"
                   onClick={resendOtp}
-                  className="font-semibold text-green-700 hover:text-green-900"
+                  disabled={isResending}
+                  className="font-semibold text-green-700 hover:text-green-900 disabled:opacity-60"
                 >
-                  Resend OTP
+                  {isResending ? "Sending..." : "Resend OTP"}
                 </button>
 
               </div>
