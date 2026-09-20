@@ -3,7 +3,43 @@ import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useAuth } from "../../context/AuthContext";
+
+
+/* =================================
+   API HELPERS
+================================= */
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+async function postJson(path, body) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  let result = {};
+
+  try {
+    result = await response.json();
+  } catch {
+    /* response was not JSON */
+  }
+
+  if (!response.ok) {
+    throw new Error(result.message || "Request failed");
+  }
+
+  return result;
+}
+
+const getErrorMessage = (error, fallback) =>
+  error instanceof TypeError
+    ? "Cannot reach the server. Is the backend running?"
+    : error.message || fallback;
 
 
 /* =================================
@@ -62,8 +98,6 @@ const vendorRegisterSchema = z
 function VendorRegister() {
   const navigate = useNavigate();
 
-  const { login } = useAuth();
-
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -91,53 +125,40 @@ function VendorRegister() {
   ================================= */
 
   const onSubmit = async (data) => {
-  setServerError("");
-  setSuccessMessage("");
+    setServerError("");
+    setSuccessMessage("");
 
-  try {
-    const response = await fetch(
-      "http://localhost:5000/api/auth/register",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: data.name,
-          email: data.email,
-          password: data.password,
-          role: "vendor",
-          phone: data.phone,
-          storeName: data.storeName,
-          address: data.address,
-        }),
-      }
-    );
+    try {
+      await postJson("/auth/register", {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: "vendor",
+        phone: data.phone,
+        storeName: data.storeName,
+        address: data.address,
+      });
 
-    const result = await response.json();
+      setSuccessMessage(
+        "Vendor account created successfully! Please login."
+      );
 
-    if (!response.ok) {
-      throw new Error(
-        result.message || "Vendor registration failed"
+      setTimeout(() => {
+        navigate("/vendor/login");
+      }, 1000);
+
+    } catch (error) {
+      console.error("Vendor registration error:", error);
+
+      setServerError(
+        getErrorMessage(
+          error,
+          "Vendor registration failed. Please try again."
+        )
       );
     }
+  };
 
-    setSuccessMessage(
-      "Vendor account created successfully! Please login."
-    );
-
-    setTimeout(() => {
-      navigate("/vendor/login");
-    }, 1000);
-  } catch (error) {
-    console.error("Vendor registration error:", error);
-
-    setServerError(
-      error.message ||
-        "Vendor registration failed. Please try again."
-    );
-  }
-};
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">
