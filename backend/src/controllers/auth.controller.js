@@ -17,6 +17,18 @@ const googleClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID
 );
 
+function sanitizeUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    is_active: user.is_active,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+  };
+}
 
 
 async function createRoleProfile(
@@ -130,7 +142,9 @@ async function register(req, res) {
     return res.status(201).json({ message: 'Registration successful', user });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('register error:', err);
+    console.error("REGISTER ERROR MESSAGE:", err.message);
+  console.error("REGISTER ERROR DETAIL:", err.detail);
+  console.error("REGISTER ERROR STACK:", err.stack);
     return res.status(500).json({ message: 'Something went wrong during registration' });
   } finally {
     client.release();
