@@ -1,4 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
 import Navbar from "./layouts/Navbar";
 
@@ -12,7 +17,13 @@ import Home from "./pages/customer/Home";
 import Products from "./pages/customer/Products";
 import ProductDetails from "./pages/customer/ProductDetails";
 import Cart from "./pages/customer/Cart";
+import Wishlist from "./pages/customer/Wishlist";
 import Profile from "./pages/customer/Profile";
+import SearchResults from "./pages/customer/SearchResults";
+import StoreProfile from "./pages/customer/StoreProfile";
+import Addresses from "./pages/customer/Addresses";
+import Checkout from "./pages/customer/Checkout";
+import OrderConfirmation from "./pages/customer/OrderConfirmation";
 
 // ================================
 // VENDOR PAGES
@@ -34,7 +45,6 @@ import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 import OtpLogin from "./pages/auth/OtpLogin";
-
 
 // =================================
 // PROTECTED ROUTE
@@ -60,7 +70,6 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-
 // =================================
 // AUTH ROUTE
 // =================================
@@ -85,7 +94,6 @@ function AuthRoute({ children }) {
   return children;
 }
 
-
 // =================================
 // APP CONTENT
 // =================================
@@ -102,8 +110,17 @@ function AppContent() {
 
       {isAuthenticated && <Navbar />}
 
-
       <Routes>
+
+        {/* =================================
+            PUBLIC STORE PROFILE
+            DOES NOT REQUIRE LOGIN
+        ================================== */}
+
+        <Route
+          path="/stores/:id"
+          element={<StoreProfile />}
+        />
 
         {/* =================================
             CUSTOMER AUTHENTICATION
@@ -119,7 +136,6 @@ function AppContent() {
           }
         />
 
-
         {/* Customer Register */}
         <Route
           path="/register"
@@ -129,7 +145,6 @@ function AppContent() {
             </AuthRoute>
           }
         />
-
 
         {/* Forgot Password */}
         <Route
@@ -141,7 +156,6 @@ function AppContent() {
           }
         />
 
-
         {/* Reset Password */}
         <Route
           path="/reset-password"
@@ -152,7 +166,6 @@ function AppContent() {
           }
         />
 
-
         {/* OTP Login */}
         <Route
           path="/otp-login"
@@ -162,7 +175,6 @@ function AppContent() {
             </AuthRoute>
           }
         />
-
 
         {/* =================================
             VENDOR AUTHENTICATION
@@ -178,7 +190,6 @@ function AppContent() {
           }
         />
 
-
         {/* Vendor Register */}
         <Route
           path="/vendor/register"
@@ -188,7 +199,6 @@ function AppContent() {
             </AuthRoute>
           }
         />
-
 
         {/* =================================
             CUSTOMER PAGES
@@ -205,7 +215,6 @@ function AppContent() {
           }
         />
 
-
         {/* Products */}
         <Route
           path="/products"
@@ -215,7 +224,6 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
-
 
         {/* Product Details */}
         <Route
@@ -227,6 +235,15 @@ function AppContent() {
           }
         />
 
+        {/* Search Results */}
+        <Route
+          path="/search"
+          element={
+            <ProtectedRoute>
+              <SearchResults />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Cart */}
         <Route
@@ -238,6 +255,35 @@ function AppContent() {
           }
         />
 
+        {/* Checkout */}
+        <Route
+          path="/checkout"
+          element={
+            <ProtectedRoute>
+              <Checkout />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Order Confirmation */}
+        <Route
+          path="/order-confirmation"
+          element={
+            <ProtectedRoute>
+              <OrderConfirmation />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Wishlist */}
+        <Route
+          path="/wishlist"
+          element={
+            <ProtectedRoute>
+              <Wishlist />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Profile */}
         <Route
@@ -249,6 +295,15 @@ function AppContent() {
           }
         />
 
+        {/* Addresses */}
+        <Route
+          path="/addresses"
+          element={
+            <ProtectedRoute>
+              <Addresses />
+            </ProtectedRoute>
+          }
+        />
 
         {/* =================================
             VENDOR DASHBOARD
@@ -263,7 +318,6 @@ function AppContent() {
           }
         />
 
-
         {/* =================================
             ADMIN DASHBOARD
         ================================== */}
@@ -276,7 +330,6 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
-
 
         {/* =================================
             UNKNOWN ROUTE
@@ -293,7 +346,6 @@ function AppContent() {
   );
 }
 
-
 // =================================
 // MAIN APP
 // =================================
@@ -301,13 +353,9 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-
       <CartProvider>
-
         <AppContent />
-
       </CartProvider>
-
     </BrowserRouter>
   );
 }

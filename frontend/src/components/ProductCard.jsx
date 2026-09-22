@@ -1,131 +1,146 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 
 function ProductCard({ product }) {
-  const { addToCart } = useCart();
-  const [wishlisted, setWishlisted] = useState(false);
+  const {
+    addToCart,
+    addToWishlist,
+    removeFromWishlist,
+    wishlistItems,
+  } = useCart();
 
-  const productId = product.id || product._id;
+  const [imageError, setImageError] = useState(false);
 
-  const image =
-    product.image ||
-    product.image_url ||
-    product.images?.[0] ||
-    "https://via.placeholder.com/400x300?text=Kirana+Product";
-
-  const name =
-    product.name ||
-    product.product_name ||
-    "Product";
-
-  const price = Number(product.price || 0);
-
-  const rating = Number(
-    product.rating ||
-    product.average_rating ||
-    0
+  // Check if product is already in wishlist
+  const isWishlisted = wishlistItems.some(
+    (item) => String(item.id) === String(product.id)
   );
 
-  const handleAddToCart = () => {
-    addToCart({
-      ...product,
-      id: productId,
-      name,
-      price,
-      image,
-    });
+  // ==========================================
+  // WISHLIST
+  // ==========================================
+
+  const handleWishlist = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (isWishlisted) {
+      removeFromWishlist(product.id);
+    } else {
+      addToWishlist(product);
+    }
+  };
+
+  // ==========================================
+  // ADD TO CART
+  // ==========================================
+
+  const handleAddToCart = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    addToCart(product);
   };
 
   return (
-    <div className="group overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+    <div className="group relative overflow-hidden rounded-2xl bg-white shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
 
-      {/* Product Image */}
-      <div className="relative h-52 overflow-hidden bg-emerald-50">
+      {/* ==========================================
+          PRODUCT IMAGE
+      ========================================== */}
 
-        <Link to={`/products/${productId}`}>
+      <div className="relative flex h-52 items-center justify-center bg-green-50">
+
+        {!imageError && product.image ? (
           <img
-            src={image}
-            alt={name}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-            onError={(e) => {
-              e.currentTarget.src =
-                "https://via.placeholder.com/400x300?text=Product";
-            }}
+            src={product.image}
+            alt={product.name}
+            className="h-full w-full object-cover"
+            onError={() => setImageError(true)}
           />
-        </Link>
+        ) : (
+          <div className="text-6xl">
+            {product.icon || "🛒"}
+          </div>
+        )}
 
-        {/* Wishlist */}
+        {/* ==========================================
+            WISHLIST BUTTON
+        ========================================== */}
+
         <button
           type="button"
-          onClick={() => setWishlisted(!wishlisted)}
-          className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl shadow-md transition hover:scale-110"
+          onClick={handleWishlist}
+          className={`absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-2xl shadow-md transition hover:scale-110 ${
+            isWishlisted
+              ? "text-red-500"
+              : "text-gray-400 hover:text-red-500"
+          }`}
         >
-          {wishlisted ? "❤️" : "🤍"}
+          {isWishlisted ? "❤️" : "♡"}
         </button>
-
-        {/* Popular Badge */}
-        {(product.featured ||
-          product.is_featured ||
-          product.popular) && (
-          <span className="absolute left-3 top-3 rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white">
-            Popular
-          </span>
-        )}
       </div>
 
-      {/* Product Details */}
-      <div className="p-4">
+      {/* ==========================================
+          PRODUCT DETAILS
+      ========================================== */}
+
+      <div className="p-5">
 
         {/* Category */}
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-600">
-          {product.category?.name ||
-            product.category_name ||
-            product.category ||
-            "Grocery"}
-        </p>
+        {product.category && (
+          <p className="mb-1 text-sm font-medium text-green-600">
+            {product.category}
+          </p>
+        )}
 
         {/* Product Name */}
-        <Link to={`/products/${productId}`}>
-          <h3 className="min-h-[48px] text-lg font-bold text-gray-800 hover:text-emerald-700">
-            {name}
-          </h3>
+        <Link to={`/products/${product.id}`}>
+          <h2 className="min-h-[56px] text-lg font-bold text-gray-800 transition hover:text-green-600">
+            {product.name}
+          </h2>
         </Link>
 
+        {/* Brand */}
+        {product.brand && (
+          <p className="mt-1 text-sm text-gray-500">
+            {product.brand}
+          </p>
+        )}
+
         {/* Rating */}
-        <div className="mt-2 flex items-center gap-2">
+        {product.rating && (
+          <div className="mt-2 flex items-center gap-1">
+            <span className="text-yellow-500">
+              ⭐
+            </span>
 
-          <span className="text-yellow-500">
-            {"★".repeat(
-              Math.min(5, Math.round(rating))
-            )}
-          </span>
+            <span className="text-sm font-medium text-gray-700">
+              {product.rating}
+            </span>
+          </div>
+        )}
 
-          <span className="text-sm text-gray-500">
-            {rating > 0
-              ? rating.toFixed(1)
-              : "No ratings"}
-          </span>
+        {/* ==========================================
+            PRICE + CART
+        ========================================== */}
 
-        </div>
+        <div className="mt-4 flex items-center justify-between gap-3">
 
-        {/* Price + Cart */}
-        <div className="mt-4 flex items-center justify-between">
-
-          <span className="text-xl font-bold text-emerald-700">
-            ₹{price.toFixed(2)}
-          </span>
+          <p className="text-xl font-bold text-green-700">
+            ₹{product.price}
+          </p>
 
           <button
             type="button"
             onClick={handleAddToCart}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
           >
-            + Cart
+            Add to Cart
           </button>
 
         </div>
-
       </div>
     </div>
   );
