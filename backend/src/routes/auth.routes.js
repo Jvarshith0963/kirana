@@ -20,6 +20,9 @@ const authLimiter = rateLimit({
   message: { message: 'Too many attempts, please try again later' },
 });
 
+const validate = require("../middleware/validate.middleware");
+const { validateRegister, validateLogin } = require("../validators/auth.validators");
+
 router.post('/register', authLimiter, register);
 router.post('/login', authLimiter, login);
 router.post('/logout', logout);
@@ -29,6 +32,10 @@ router.post('/reset-password', authLimiter, resetPassword);
 router.post('/otp/request', authLimiter, requestOTP);
 router.post('/otp/verify', authLimiter, verifyOTP);
 router.post('/google', authLimiter, googleLogin);
+
+router.post('/register', authLimiter, validateRegister, validate, register);
+router.post('/login', authLimiter, validateLogin, validate, login);
+
 
 
 module.exports = router;
