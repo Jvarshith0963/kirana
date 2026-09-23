@@ -7,7 +7,12 @@ import {
 
 import Navbar from "./layouts/Navbar";
 
+// ================================
+// CONTEXT PROVIDERS
+// ================================
 import { CartProvider } from "./context/CartContext";
+import { NotificationProvider } from "./context/NotificationContext";
+import { ToastProvider } from "./context/ToastContext";
 import { useAuth } from "./context/AuthContext";
 
 // ================================
@@ -26,11 +31,34 @@ import Checkout from "./pages/customer/Checkout";
 import OrderConfirmation from "./pages/customer/OrderConfirmation";
 
 // ================================
+// PAYMENT PAGES
+// ================================
+import Payment from "./pages/customer/Payment";
+import PaymentSuccess from "./pages/customer/PaymentSuccess";
+import PaymentFailure from "./pages/customer/PaymentFailure";
+
+// ================================
+// ORDER PAGES
+// ================================
+import MyOrders from "./pages/customer/MyOrders";
+import OrderDetails from "./pages/customer/OrderDetails";
+import Invoice from "./pages/customer/Invoice";
+
+// ================================
+// NOTIFICATION PAGE
+// ================================
+import Notifications from "./pages/customer/Notifications";
+
+// ================================
 // VENDOR PAGES
 // ================================
 import VendorDashboard from "./pages/vendor/Dashboard";
 import VendorLogin from "./pages/vendor/VendorLogin";
 import VendorRegister from "./pages/vendor/VendorRegister";
+import VendorProducts from "./pages/vendor/Products";
+import VendorInventory from "./pages/vendor/Inventory";
+import VendorOrders from "./pages/vendor/Orders";
+import VendorSales from "./pages/vendor/Sales";
 
 // ================================
 // ADMIN PAGES
@@ -49,7 +77,6 @@ import OtpLogin from "./pages/auth/OtpLogin";
 // =================================
 // PROTECTED ROUTE
 // =================================
-
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
@@ -73,7 +100,6 @@ function ProtectedRoute({ children }) {
 // =================================
 // AUTH ROUTE
 // =================================
-
 function AuthRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
@@ -97,7 +123,6 @@ function AuthRoute({ children }) {
 // =================================
 // APP CONTENT
 // =================================
-
 function AppContent() {
   const { isAuthenticated } = useAuth();
 
@@ -107,7 +132,6 @@ function AppContent() {
           NAVBAR
           Shows after login
       ================================== */}
-
       {isAuthenticated && <Navbar />}
 
       <Routes>
@@ -116,7 +140,6 @@ function AppContent() {
             PUBLIC STORE PROFILE
             DOES NOT REQUIRE LOGIN
         ================================== */}
-
         <Route
           path="/stores/:id"
           element={<StoreProfile />}
@@ -265,7 +288,44 @@ function AppContent() {
           }
         />
 
-        {/* Order Confirmation */}
+        {/* =================================
+            PAYMENT
+        ================================== */}
+
+        {/* Payment Method Selection */}
+        <Route
+          path="/payment"
+          element={
+            <ProtectedRoute>
+              <Payment />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Payment Success */}
+        <Route
+          path="/payment-success"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccess />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Payment Failure */}
+        <Route
+          path="/payment-failure"
+          element={
+            <ProtectedRoute>
+              <PaymentFailure />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            ORDER CONFIRMATION
+        ================================== */}
+
         <Route
           path="/order-confirmation"
           element={
@@ -275,7 +335,64 @@ function AppContent() {
           }
         />
 
-        {/* Wishlist */}
+        {/* =================================
+            MY ORDERS
+        ================================== */}
+
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute>
+              <MyOrders />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            ORDER DETAILS
+            /orders/:orderId
+        ================================== */}
+
+        <Route
+          path="/orders/:orderId"
+          element={
+            <ProtectedRoute>
+              <OrderDetails />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            INVOICE
+            /orders/:orderId/invoice
+        ================================== */}
+
+        <Route
+          path="/orders/:orderId/invoice"
+          element={
+            <ProtectedRoute>
+              <Invoice />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            NOTIFICATIONS
+        ================================== */}
+
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute>
+              <Notifications />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            WISHLIST
+        ================================== */}
+
         <Route
           path="/wishlist"
           element={
@@ -285,7 +402,10 @@ function AppContent() {
           }
         />
 
-        {/* Profile */}
+        {/* =================================
+            PROFILE
+        ================================== */}
+
         <Route
           path="/profile"
           element={
@@ -295,7 +415,10 @@ function AppContent() {
           }
         />
 
-        {/* Addresses */}
+        {/* =================================
+            ADDRESSES
+        ================================== */}
+
         <Route
           path="/addresses"
           element={
@@ -314,6 +437,62 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <VendorDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            VENDOR PRODUCT MANAGEMENT
+            /vendor/products
+        ================================== */}
+
+        <Route
+          path="/vendor/products"
+          element={
+            <ProtectedRoute>
+              <VendorProducts />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            VENDOR INVENTORY
+            /vendor/inventory
+        ================================== */}
+
+        <Route
+          path="/vendor/inventory"
+          element={
+            <ProtectedRoute>
+              <VendorInventory />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            VENDOR ORDER MANAGEMENT
+            /vendor/orders
+        ================================== */}
+
+        <Route
+          path="/vendor/orders"
+          element={
+            <ProtectedRoute>
+              <VendorOrders />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* =================================
+            VENDOR SALES DASHBOARD
+            /vendor/sales
+        ================================== */}
+
+        <Route
+          path="/vendor/sales"
+          element={
+            <ProtectedRoute>
+              <VendorSales />
             </ProtectedRoute>
           }
         />
@@ -349,13 +528,16 @@ function AppContent() {
 // =================================
 // MAIN APP
 // =================================
-
 function App() {
   return (
     <BrowserRouter>
-      <CartProvider>
-        <AppContent />
-      </CartProvider>
+      <NotificationProvider>
+        <ToastProvider>
+          <CartProvider>
+            <AppContent />
+          </CartProvider>
+        </ToastProvider>
+      </NotificationProvider>
     </BrowserRouter>
   );
 }

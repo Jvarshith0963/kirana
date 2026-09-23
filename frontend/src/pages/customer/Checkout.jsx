@@ -57,8 +57,8 @@ function Checkout() {
 
   const [error, setError] = useState("");
 
-  const [placingOrder, setPlacingOrder] =
-    useState(false);
+  const [loadingAddresses, setLoadingAddresses] =
+    useState(true);
 
   // =================================
   // LOAD ADDRESSES
@@ -70,12 +70,14 @@ function Checkout() {
         localStorage.getItem("kirana_addresses");
 
       if (!savedAddresses) {
+        setLoadingAddresses(false);
         return;
       }
 
       const parsed = JSON.parse(savedAddresses);
 
       if (!Array.isArray(parsed)) {
+        setLoadingAddresses(false);
         return;
       }
 
@@ -99,6 +101,8 @@ function Checkout() {
       setError(
         "Unable to load your saved addresses."
       );
+    } finally {
+      setLoadingAddresses(false);
     }
   }, []);
 
@@ -127,7 +131,7 @@ function Checkout() {
   // =================================
   // DELIVERY CHARGE
   // =================================
-  // Same threshold as Cart.jsx:
+
   // Orders >= ₹300 get free delivery.
   // Store pickup is always free.
 
@@ -138,8 +142,14 @@ function Checkout() {
       : selectedDeliveryOption?.charge || 0;
 
   // =================================
-  // TEMPORARY DISCOUNT
+  // DISCOUNT
   // =================================
+
+  // Coupon discount is currently handled
+  // in Cart.jsx.
+  //
+  // Backend will calculate the final
+  // discount after API integration.
 
   const discount = 0;
 
@@ -163,10 +173,10 @@ function Checkout() {
     );
 
   // =================================
-  // PLACE ORDER
+  // CONTINUE TO PAYMENT
   // =================================
 
-  const handlePlaceOrder = () => {
+  const handleContinueToPayment = () => {
     setError("");
 
     // Empty cart
@@ -181,7 +191,7 @@ function Checkout() {
     // No address
     if (!selectedAddress) {
       setError(
-        "Please select a delivery address before placing the order."
+        "Please select a delivery address before continuing."
       );
 
       return;
@@ -196,71 +206,80 @@ function Checkout() {
       return;
     }
 
-    // Prevent duplicate clicks
-    if (placingOrder) {
-      return;
+    // =================================
+    // CREATE TEMPORARY ORDER OBJECT
+    // =================================
+    //
+    // This is only for frontend flow.
+    //
+    // Later Varshith's backend will create
+    // the actual order and Razorpay order.
+    // =================================
+
+    try {
+      const orderId =
+        "KIR" +
+        Date.now()
+          .toString()
+          .slice(-8);
+
+      const order = {
+        orderId,
+
+        items: cartItems,
+
+        address: selectedAddress,
+
+        deliveryOption:
+          selectedDeliveryOption,
+
+        subtotal,
+
+        deliveryCharge,
+
+        discount,
+
+        total: finalTotal,
+
+        paymentMethod: null,
+
+        paymentStatus: "Pending",
+
+        paymentId: null,
+
+        orderStatus: "Payment Pending",
+
+        createdAt:
+          new Date().toISOString(),
+      };
+
+      // Save temporarily so Payment.jsx
+      // can access it even after refresh.
+
+      localStorage.setItem(
+        "kirana_last_order",
+        JSON.stringify(order)
+      );
+
+      // =================================
+      // GO TO PAYMENT PAGE
+      // =================================
+
+      navigate("/payment", {
+        state: {
+          order,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Unable to continue to payment:",
+        err
+      );
+
+      setError(
+        "Something went wrong while preparing your payment. Please try again."
+      );
     }
-
-    setPlacingOrder(true);
-
-    // =================================
-    // TEMPORARY FRONTEND ORDER CREATION
-    // Backend API will replace this later.
-    // =================================
-
-    setTimeout(() => {
-      try {
-        const orderId =
-          "KIR" +
-          Date.now()
-            .toString()
-            .slice(-8);
-
-        const order = {
-          orderId,
-
-          items: cartItems,
-
-          address: selectedAddress,
-
-          deliveryOption:
-            selectedDeliveryOption,
-
-          subtotal,
-
-          deliveryCharge,
-
-          discount,
-
-          total: finalTotal,
-
-          createdAt:
-            new Date().toISOString(),
-        };
-
-        localStorage.setItem(
-          "kirana_last_order",
-          JSON.stringify(order)
-        );
-
-        setPlacingOrder(false);
-
-        navigate(
-          "/order-confirmation"
-        );
-      } catch (err) {
-        console.error(
-          "Order creation failed:",
-          err
-        );
-
-        setPlacingOrder(false);
-
-        setError(
-          "Something went wrong while placing your order. Please try again."
-        );
-      }
-    }, 1000);
   };
 
   // =================================
@@ -303,10 +322,10 @@ function Checkout() {
   }
 
   // =================================
-  // LOADING SKELETON
+  // ADDRESS LOADING
   // =================================
 
-  if (placingOrder) {
+  if (loadingAddresses) {
     return (
       <LoadingSkeleton type="checkout" />
     );
@@ -323,7 +342,7 @@ function Checkout() {
 
         {/* =================================
             HEADER
-        ================================= */}
+        ================================== */}
 
         <div className="mb-8">
 
@@ -332,14 +351,14 @@ function Checkout() {
           </h1>
 
           <p className="mt-1 text-gray-600">
-            Review your order and complete your purchase
+            Review your order and continue to payment
           </p>
 
         </div>
 
         {/* =================================
             ERROR MESSAGE
-        ================================= */}
+        ================================== */}
 
         {error && (
           <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-600">
@@ -361,19 +380,19 @@ function Checkout() {
 
         {/* =================================
             MAIN GRID
-        ================================= */}
+        ================================== */}
 
         <div className="grid gap-6 lg:grid-cols-3">
 
           {/* =================================
               LEFT SIDE
-          ================================= */}
+          ================================== */}
 
           <div className="space-y-6 lg:col-span-2">
 
             {/* =================================
                 ADDRESS
-            ================================= */}
+            ================================== */}
 
             <section className="rounded-2xl bg-white p-6 shadow-md">
 
@@ -403,6 +422,7 @@ function Checkout() {
               </div>
 
               {/* No Addresses */}
+
               {addresses.length === 0 ? (
 
                 <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center">
@@ -511,7 +531,7 @@ function Checkout() {
 
             {/* =================================
                 DELIVERY OPTIONS
-            ================================= */}
+            ================================== */}
 
             <section className="rounded-2xl bg-white p-6 shadow-md">
 
@@ -590,16 +610,18 @@ function Checkout() {
               {subtotal >= 300 &&
                 selectedDelivery !==
                   "pickup" && (
+
                   <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-medium text-green-700">
                     🎉 Free delivery applied on orders above ₹300.
                   </p>
+
                 )}
 
             </section>
 
             {/* =================================
                 CART ITEMS
-            ================================= */}
+            ================================== */}
 
             <section className="rounded-2xl bg-white p-6 shadow-md">
 
@@ -733,7 +755,7 @@ function Checkout() {
 
           {/* =================================
               RIGHT SIDE
-          ================================= */}
+          ================================== */}
 
           <div>
 
@@ -748,6 +770,7 @@ function Checkout() {
                 {/* Subtotal */}
 
                 <div className="flex justify-between text-gray-600">
+
                   <span>
                     Subtotal
                   </span>
@@ -755,6 +778,7 @@ function Checkout() {
                   <span>
                     ₹{subtotal.toFixed(2)}
                   </span>
+
                 </div>
 
                 {/* Delivery */}
@@ -822,6 +846,7 @@ function Checkout() {
               {/* Selected Address */}
 
               {selectedAddress && (
+
                 <div className="mt-6 rounded-xl bg-gray-50 p-4">
 
                   <p className="mb-1 text-sm font-semibold text-gray-800">
@@ -838,21 +863,18 @@ function Checkout() {
                   </p>
 
                 </div>
+
               )}
 
-              {/* Place Order */}
+              {/* Continue to Payment */}
 
               <button
                 type="button"
-                onClick={handlePlaceOrder}
-                disabled={placingOrder}
-                className="mt-6 w-full rounded-xl bg-green-600 py-4 font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleContinueToPayment}
+                className="mt-6 w-full rounded-xl bg-green-600 py-4 font-bold text-white transition hover:bg-green-700"
               >
-                {placingOrder
-                  ? "Placing Order..."
-                  : `Place Order • ₹${finalTotal.toFixed(
-                      2
-                    )}`}
+                Continue to Payment • ₹
+                {finalTotal.toFixed(2)}
               </button>
 
               {/* Back */}
