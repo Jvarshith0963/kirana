@@ -25,4 +25,28 @@ async function sendPasswordResetEmail(toEmail, resetLink) {
   });
 }
 
-module.exports = { sendPasswordResetEmail };
+async function sendOrderPlacedEmail(toEmail, order) {
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM || '"Kirana Marketplace" <no-reply@kirana.local>',
+    to: toEmail,
+    subject: `Order Confirmed — #${order.id}`,
+    html: `
+      <p>Thanks for your order!</p>
+      <p>Order #${order.id} — Total: ₹${order.total_amount || order.totalAmount}</p>
+      <p>We'll notify you as it progresses.</p>
+    `,
+  });
+}
+
+async function sendOrderDeliveredEmail(toEmail, order) {
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM || '"Kirana Marketplace" <no-reply@kirana.local>',
+    to: toEmail,
+    subject: `Order Delivered — #${order.id}`,
+    html: `
+      <p>Your order #${order.id} has been delivered. Enjoy!</p>
+    `,
+  });
+}
+
+module.exports = { sendPasswordResetEmail, sendOrderPlacedEmail, sendOrderDeliveredEmail };
