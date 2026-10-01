@@ -6,44 +6,6 @@ import { z } from "zod";
 import { useAuth } from "../../context/AuthContext";
 import { GoogleLogin } from "@react-oauth/google";
 
-
-/* =================================
-   API HELPERS
-================================= */
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
-async function postJson(path, body) {
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  let result = {};
-
-  try {
-    result = await response.json();
-  } catch {
-    /* response was not JSON */
-  }
-
-  if (!response.ok) {
-    throw new Error(result.message || "Request failed");
-  }
-
-  return result;
-}
-
-const getErrorMessage = (error, fallback) =>
-  error instanceof TypeError
-    ? "Cannot reach the server. Is the backend running?"
-    : error.message || fallback;
-
-
 /* =================================
    LOGIN VALIDATION
 ================================= */
@@ -60,7 +22,6 @@ const loginSchema = z.object({
     .min(6, "Password must be at least 6 characters"),
 });
 
-
 /* =================================
    LOGIN PAGE
 ================================= */
@@ -71,7 +32,6 @@ function Login() {
   const { login } = useAuth();
 
   const [serverError, setServerError] = useState("");
-
 
   /* =================================
      FORM
@@ -93,72 +53,65 @@ function Login() {
     },
   });
 
-
   /* =================================
-     LOGIN SUBMIT
+     FRONTEND TEST LOGIN
   ================================= */
 
   const onSubmit = async (data) => {
     setServerError("");
 
     try {
-      const result = await postJson("/auth/login", {
-        email: data.email,
-        password: data.password,
-      });
+      /*
+        Temporary frontend-only login.
 
-      // Backend returns { token, user }.
-      // accessToken / refreshToken are also supported if you add them later.
-      login(
-        result.user,
-        result.accessToken ?? result.token,
-        result.refreshToken
-      );
+        This allows Hasini to develop and test
+        the frontend without running Varshith's backend.
+
+        Later Varshith can replace this with
+        the real backend API.
+      */
+
+      const testUser = {
+        id: 1,
+        name: "Test Customer",
+        email: data.email,
+        phone: "9876543210",
+        role: "customer",
+      };
+
+      const testToken = "frontend-test-jwt-token";
+
+      login(testUser, testToken);
 
       navigate("/");
-
     } catch (error) {
       console.error("Login error:", error);
 
       setServerError(
-        getErrorMessage(
-          error,
-          "Login failed. Please check your email and password."
-        )
+        "Login failed. Please try again."
       );
     }
   };
-
 
   /* =================================
      GOOGLE LOGIN
   ================================= */
 
   const handleGoogleLogin = async (credentialResponse) => {
-    setServerError("");
+    /*
+      Google backend integration will be done later
+      by connecting this to Varshith's API.
+    */
 
-    try {
-      const result = await postJson("/auth/google", {
-        idToken: credentialResponse.credential,
-      });
+    console.log(
+      "Google credential received:",
+      credentialResponse
+    );
 
-      login(
-        result.user,
-        result.accessToken ?? result.token,
-        result.refreshToken
-      );
-
-      navigate("/");
-
-    } catch (error) {
-      console.error("Google login error:", error);
-
-      setServerError(
-        getErrorMessage(error, "Google login failed")
-      );
-    }
+    setServerError(
+      "Google login will be connected to the backend."
+    );
   };
-
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">
@@ -166,7 +119,6 @@ function Login() {
       <div className="mx-auto max-w-md">
 
         <div className="rounded-2xl bg-white p-8 shadow-lg">
-
 
           {/* =================================
               HEADER
@@ -188,9 +140,8 @@ function Login() {
 
           </div>
 
-
           {/* =================================
-              SERVER ERROR
+              ERROR MESSAGE
           ================================= */}
 
           {serverError && (
@@ -198,7 +149,6 @@ function Login() {
               {serverError}
             </div>
           )}
-
 
           {/* =================================
               LOGIN FORM
@@ -240,7 +190,6 @@ function Login() {
 
             </div>
 
-
             {/* Password */}
 
             <div>
@@ -272,7 +221,6 @@ function Login() {
 
             </div>
 
-
             {/* Forgot Password */}
 
             <div className="text-right">
@@ -285,7 +233,6 @@ function Login() {
               </Link>
 
             </div>
-
 
             {/* Login Button */}
 
@@ -300,7 +247,6 @@ function Login() {
             </button>
 
           </form>
-
 
           {/* =================================
               DIVIDER
@@ -318,7 +264,6 @@ function Login() {
 
           </div>
 
-
           {/* =================================
               OTP LOGIN
           ================================= */}
@@ -331,7 +276,6 @@ function Login() {
             📱 Login with OTP
           </button>
 
-
           {/* =================================
               GOOGLE LOGIN
           ================================= */}
@@ -342,12 +286,14 @@ function Login() {
               onSuccess={handleGoogleLogin}
               onError={() => {
                 console.error("Google Login Failed");
-                setServerError("Google login failed. Please try again.");
+
+                setServerError(
+                  "Google login failed. Please try again."
+                );
               }}
             />
 
           </div>
-
 
           {/* =================================
               CREATE ACCOUNT
@@ -365,7 +311,6 @@ function Login() {
             </Link>
 
           </p>
-
 
           {/* =================================
               VENDOR LOGIN
