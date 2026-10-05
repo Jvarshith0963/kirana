@@ -7,9 +7,12 @@ import {
 
 import Navbar from "./layouts/Navbar";
 
+import RoleRoute from "./components/RoleRoute";
+
 // ================================
 // CONTEXT PROVIDERS
 // ================================
+
 import { CartProvider } from "./context/CartContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { ToastProvider } from "./context/ToastContext";
@@ -18,6 +21,7 @@ import { useAuth } from "./context/AuthContext";
 // ================================
 // CUSTOMER PAGES
 // ================================
+
 import Home from "./pages/customer/Home";
 import Products from "./pages/customer/Products";
 import ProductDetails from "./pages/customer/ProductDetails";
@@ -33,6 +37,7 @@ import OrderConfirmation from "./pages/customer/OrderConfirmation";
 // ================================
 // PAYMENT PAGES
 // ================================
+
 import Payment from "./pages/customer/Payment";
 import PaymentSuccess from "./pages/customer/PaymentSuccess";
 import PaymentFailure from "./pages/customer/PaymentFailure";
@@ -40,6 +45,7 @@ import PaymentFailure from "./pages/customer/PaymentFailure";
 // ================================
 // ORDER PAGES
 // ================================
+
 import MyOrders from "./pages/customer/MyOrders";
 import OrderDetails from "./pages/customer/OrderDetails";
 import Invoice from "./pages/customer/Invoice";
@@ -47,11 +53,13 @@ import Invoice from "./pages/customer/Invoice";
 // ================================
 // NOTIFICATION PAGE
 // ================================
+
 import Notifications from "./pages/customer/Notifications";
 
 // ================================
 // VENDOR PAGES
 // ================================
+
 import VendorDashboard from "./pages/vendor/Dashboard";
 import VendorLogin from "./pages/vendor/VendorLogin";
 import VendorRegister from "./pages/vendor/VendorRegister";
@@ -63,11 +71,13 @@ import VendorSales from "./pages/vendor/Sales";
 // ================================
 // ADMIN PAGES
 // ================================
+
 import AdminDashboard from "./pages/admin/Dashboard";
 
 // ================================
 // AUTHENTICATION PAGES
 // ================================
+
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -77,6 +87,7 @@ import OtpLogin from "./pages/auth/OtpLogin";
 // =================================
 // PROTECTED ROUTE
 // =================================
+
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
@@ -98,8 +109,69 @@ function ProtectedRoute({ children }) {
 }
 
 // =================================
+// VENDOR ROUTE
+// =================================
+
+function VendorRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-green-50">
+        <p className="text-lg font-semibold text-green-700">
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/vendor/login" replace />;
+  }
+
+  if (user.role !== "vendor") {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+//Admin Route
+
+
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-green-50">
+        <p className="text-lg font-semibold text-green-700">
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== "admin") {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <p className="text-red-600">
+        Current role: {String(user.role)}
+      </p>
+    </div>
+  );
+}
+
+  return children;
+}
+// =================================
 // AUTH ROUTE
 // =================================
+
 function AuthRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
@@ -123,6 +195,7 @@ function AuthRoute({ children }) {
 // =================================
 // APP CONTENT
 // =================================
+
 function AppContent() {
   const { isAuthenticated } = useAuth();
 
@@ -135,11 +208,11 @@ function AppContent() {
       {isAuthenticated && <Navbar />}
 
       <Routes>
-
         {/* =================================
             PUBLIC STORE PROFILE
             DOES NOT REQUIRE LOGIN
         ================================== */}
+
         <Route
           path="/stores/:id"
           element={<StoreProfile />}
@@ -435,9 +508,9 @@ function AppContent() {
         <Route
           path="/vendor"
           element={
-            <ProtectedRoute>
+            <VendorRoute>
               <VendorDashboard />
-            </ProtectedRoute>
+            </VendorRoute>
           }
         />
 
@@ -449,9 +522,9 @@ function AppContent() {
         <Route
           path="/vendor/products"
           element={
-            <ProtectedRoute>
+            <VendorRoute>
               <VendorProducts />
-            </ProtectedRoute>
+            </VendorRoute>
           }
         />
 
@@ -463,9 +536,9 @@ function AppContent() {
         <Route
           path="/vendor/inventory"
           element={
-            <ProtectedRoute>
+            <VendorRoute>
               <VendorInventory />
-            </ProtectedRoute>
+            </VendorRoute>
           }
         />
 
@@ -477,9 +550,9 @@ function AppContent() {
         <Route
           path="/vendor/orders"
           element={
-            <ProtectedRoute>
+            <VendorRoute>
               <VendorOrders />
-            </ProtectedRoute>
+            </VendorRoute>
           }
         />
 
@@ -491,9 +564,9 @@ function AppContent() {
         <Route
           path="/vendor/sales"
           element={
-            <ProtectedRoute>
+            <VendorRoute>
               <VendorSales />
-            </ProtectedRoute>
+            </VendorRoute>
           }
         />
 
@@ -502,13 +575,13 @@ function AppContent() {
         ================================== */}
 
         <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+  path="/admin"
+  element={
+    <RoleRoute allowedRoles={["admin"]}>
+      <AdminDashboard />
+    </RoleRoute>
+  }
+/>
 
         {/* =================================
             UNKNOWN ROUTE
@@ -519,7 +592,6 @@ function AppContent() {
           path="*"
           element={<Navigate to="/login" replace />}
         />
-
       </Routes>
     </>
   );
@@ -528,6 +600,7 @@ function AppContent() {
 // =================================
 // MAIN APP
 // =================================
+
 function App() {
   return (
     <BrowserRouter>

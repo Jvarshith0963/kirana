@@ -165,14 +165,12 @@ function OtpLogin() {
     setSuccessMessage("");
 
     try {
-      const result = await postJson("/auth/otp/verify", {
+            const result = await postJson("/auth/otp/verify", {
         phone,
         otp: data.otp,
       });
 
-      // result = { token, user }
-      login(result.user, result.token);
-
+      login(result.user, result.accessToken, result.refreshToken);
       setSuccessMessage("OTP verified successfully!");
 
       setTimeout(() => {

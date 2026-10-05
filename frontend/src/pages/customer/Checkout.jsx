@@ -1,908 +1,473 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
 import { useCart } from "../../context/CartContext";
-import LoadingSkeleton from "../../components/LoadingSkeleton";
 
-// =================================
-// DELIVERY OPTIONS
-// =================================
+// Adjust these two to match your project
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const COUPON_KEY = "kirana_applied_coupon";
+const getToken = () => localStorage.getItem("token");
 
-const deliveryOptions = [
-  {
-    id: "standard",
-    name: "Standard Delivery",
-    description: "Delivery within 1–2 days",
-    charge: 30,
-  },
-  {
-    id: "express",
-    name: "Express Delivery",
-    description: "Delivery within a few hours",
-    charge: 60,
-  },
-  {
-    id: "same-day",
-    name: "Same Day Delivery",
-    description: "Get your order today",
-    charge: 80,
-  },
-  {
-    id: "pickup",
-    name: "Store Pickup",
-    description: "Pick up from the store",
-    charge: 0,
-  },
-];
-
-// =================================
-// CHECKOUT
-// =================================
-
-function Checkout() {
+function Cart() {
   const navigate = useNavigate();
 
   const {
     cartItems,
-    updateQuantity,
+    increaseQuantity,
+    decreaseQuantity,
+    removeFromCart,
   } = useCart();
 
-  const [addresses, setAddresses] = useState([]);
-
-  const [selectedAddressId, setSelectedAddressId] =
-    useState(null);
-
-  const [selectedDelivery, setSelectedDelivery] =
-    useState("standard");
-
-  const [error, setError] = useState("");
-
-  const [loadingAddresses, setLoadingAddresses] =
-    useState(true);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponError, setCouponError] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   // =================================
-  // LOAD ADDRESSES
+  // GROUP CART ITEMS BY STORE
   // =================================
 
-  useEffect(() => {
-    try {
-      const savedAddresses =
-        localStorage.getItem("kirana_addresses");
+  const groupedItems = cartItems.reduce((groups, item) => {
+    const storeName = item.storeName || "Sri Lakshmi Kirana Store";
 
-      if (!savedAddresses) {
-        setLoadingAddresses(false);
-        return;
-      }
-
-      const parsed = JSON.parse(savedAddresses);
-
-      if (!Array.isArray(parsed)) {
-        setLoadingAddresses(false);
-        return;
-      }
-
-      setAddresses(parsed);
-
-      const defaultAddress = parsed.find(
-        (address) => address.isDefault
-      );
-
-      if (defaultAddress) {
-        setSelectedAddressId(defaultAddress.id);
-      } else if (parsed.length > 0) {
-        setSelectedAddressId(parsed[0].id);
-      }
-    } catch (err) {
-      console.error(
-        "Unable to load addresses:",
-        err
-      );
-
-      setError(
-        "Unable to load your saved addresses."
-      );
-    } finally {
-      setLoadingAddresses(false);
+    if (!groups[storeName]) {
+      groups[storeName] = [];
     }
-  }, []);
+
+    groups[storeName].push(item);
+
+    return groups;
+  }, {});
 
   // =================================
   // SUBTOTAL
   // =================================
 
-  const subtotal = cartItems.reduce(
-    (total, item) =>
-      total +
-      Number(item.price || 0) *
-        Number(item.quantity || 1),
-    0
-  );
+  const subtotal = cartItems.reduce((total, item) => {
+    return total + Number(item.price || 0) * Number(item.quantity || 1);
+  }, 0);
 
   // =================================
-  // SELECTED DELIVERY
+  // COUPON DISCOUNT (from backend)
   // =================================
 
-  const selectedDeliveryOption =
-    deliveryOptions.find(
-      (option) =>
-        option.id === selectedDelivery
-    );
+  const discount = appliedCoupon
+    ? Math.min(Number(couponDiscount || 0), subtotal)
+    : 0;
 
   // =================================
-  // DELIVERY CHARGE
+  // DELIVERY
   // =================================
 
-  // Orders >= ₹300 get free delivery.
-  // Store pickup is always free.
-
-  const deliveryCharge =
-    subtotal >= 300 &&
-    selectedDelivery !== "pickup"
-      ? 0
-      : selectedDeliveryOption?.charge || 0;
-
-  // =================================
-  // DISCOUNT
-  // =================================
-
-  // Coupon discount is currently handled
-  // in Cart.jsx.
-  //
-  // Backend will calculate the final
-  // discount after API integration.
-
-  const discount = 0;
+  const delivery = subtotal >= 300 || subtotal === 0 ? 0 : 30;
 
   // =================================
   // FINAL TOTAL
   // =================================
 
-  const finalTotal =
-    subtotal +
-    deliveryCharge -
-    discount;
+  const finalTotal = Math.max(subtotal + delivery - discount, 0);
 
   // =================================
-  // SELECTED ADDRESS
+  // VALIDATE COUPON WITH BACKEND
   // =================================
 
-  const selectedAddress =
-    addresses.find(
-      (address) =>
-        address.id === selectedAddressId
-    );
+  const clearCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponDiscount(0);
+    localStorage.removeItem(COUPON_KEY);
+  };
 
-  // =================================
-  // CONTINUE TO PAYMENT
-  // =================================
+  const validateCoupon = async (code, silent = false) => {
+    const token = getToken();
 
-  const handleContinueToPayment = () => {
-    setError("");
-
-    // Empty cart
-    if (!cartItems || cartItems.length === 0) {
-      setError(
-        "Your cart is empty. Please add products before checkout."
-      );
-
+    if (!token) {
+      if (!silent) setCouponError("Please login to apply a coupon.");
       return;
     }
 
-    // No address
-    if (!selectedAddress) {
-      setError(
-        "Please select a delivery address before continuing."
-      );
-
-      return;
-    }
-
-    // Delivery option check
-    if (!selectedDeliveryOption) {
-      setError(
-        "Please select a valid delivery option."
-      );
-
-      return;
-    }
-
-    // =================================
-    // CREATE TEMPORARY ORDER OBJECT
-    // =================================
-    //
-    // This is only for frontend flow.
-    //
-    // Later Varshith's backend will create
-    // the actual order and Razorpay order.
-    // =================================
+    if (!silent) setApplyingCoupon(true);
 
     try {
-      const orderId =
-        "KIR" +
-        Date.now()
-          .toString()
-          .slice(-8);
+      const items = cartItems.map((item) => ({
+        product_id: item.productId ?? item.id,
+        quantity: item.quantity,
+      }));
 
-      const order = {
-        orderId,
-
-        items: cartItems,
-
-        address: selectedAddress,
-
-        deliveryOption:
-          selectedDeliveryOption,
-
-        subtotal,
-
-        deliveryCharge,
-
-        discount,
-
-        total: finalTotal,
-
-        paymentMethod: null,
-
-        paymentStatus: "Pending",
-
-        paymentId: null,
-
-        orderStatus: "Payment Pending",
-
-        createdAt:
-          new Date().toISOString(),
-      };
-
-      // Save temporarily so Payment.jsx
-      // can access it even after refresh.
-
-      localStorage.setItem(
-        "kirana_last_order",
-        JSON.stringify(order)
-      );
-
-      // =================================
-      // GO TO PAYMENT PAGE
-      // =================================
-
-      navigate("/payment", {
-        state: {
-          order,
+      const response = await fetch(`${API_URL}/coupons/validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ items, coupon_code: code }),
       });
-    } catch (err) {
-      console.error(
-        "Unable to continue to payment:",
-        err
-      );
 
-      setError(
-        "Something went wrong while preparing your payment. Please try again."
-      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Invalid coupon code.");
+      }
+
+      setAppliedCoupon(code);
+      setCouponDiscount(Number(result.data?.discount || 0));
+      localStorage.setItem(COUPON_KEY, code);
+      setCouponCode("");
+      setCouponError("");
+    } catch (error) {
+      console.error("Coupon validation failed:", error);
+      if (!silent) setCouponError(error.message || "Invalid coupon code.");
+      clearCoupon();
+    } finally {
+      if (!silent) setApplyingCoupon(false);
     }
+  };
+
+  // Restore the saved coupon and re-validate whenever the cart changes
+  const cartSignature = JSON.stringify(
+    cartItems.map((i) => [i.productId ?? i.id, i.quantity])
+  );
+
+  useEffect(() => {
+    const saved = localStorage.getItem(COUPON_KEY);
+
+    if (!saved) return;
+
+    if (cartItems.length === 0) {
+      clearCoupon();
+      return;
+    }
+
+    validateCoupon(saved, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartSignature]);
+
+  // =================================
+  // APPLY COUPON
+  // =================================
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    setCouponError("");
+
+    if (!code) {
+      setCouponError("Please enter a coupon code.");
+      return;
+    }
+
+    await validateCoupon(code);
+  };
+
+  // =================================
+  // REMOVE COUPON
+  // =================================
+
+  const handleRemoveCoupon = () => {
+    clearCoupon();
+    setCouponError("");
+  };
+
+  // =================================
+  // CHECKOUT
+  // =================================
+
+  const handleCheckout = () => {
+    if (!cartItems || cartItems.length === 0) {
+      return;
+    }
+
+    navigate("/checkout");
   };
 
   // =================================
   // EMPTY CART
   // =================================
 
-  if (
-    !cartItems ||
-    cartItems.length === 0
-  ) {
+  if (!cartItems || cartItems.length === 0) {
     return (
       <div className="min-h-screen bg-green-50 px-4 py-12">
         <div className="mx-auto max-w-xl rounded-2xl bg-white p-10 text-center shadow-md">
-
-          <div className="mb-4 text-6xl">
-            🛒
-          </div>
+          <div className="mb-4 text-6xl">🛒</div>
 
           <h1 className="text-2xl font-bold text-gray-800">
-            Your cart is empty
+            Your Cart is Empty
           </h1>
 
           <p className="mt-2 text-gray-500">
-            Add some products before proceeding
-            to checkout.
+            Add some products to your cart to continue shopping.
           </p>
 
           <button
-            onClick={() =>
-              navigate("/products")
-            }
-            className="mt-6 rounded-lg bg-green-600 px-6 py-3 font-semibold text-white hover:bg-green-700"
+            onClick={() => navigate("/products")}
+            className="mt-6 rounded-lg bg-green-600 px-6 py-3 font-semibold text-white transition hover:bg-green-700"
           >
             Continue Shopping
           </button>
-
         </div>
       </div>
     );
   }
 
   // =================================
-  // ADDRESS LOADING
-  // =================================
-
-  if (loadingAddresses) {
-    return (
-      <LoadingSkeleton type="checkout" />
-    );
-  }
-
-  // =================================
-  // MAIN CHECKOUT
+  // MAIN CART
   // =================================
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-8">
-
-      <div className="mx-auto max-w-7xl">
-
-        {/* =================================
-            HEADER
-        ================================== */}
-
+      <div className="mx-auto max-w-6xl">
+        {/* HEADER */}
         <div className="mb-8">
-
-          <h1 className="text-3xl font-bold text-green-800">
-            Checkout
-          </h1>
-
-          <p className="mt-1 text-gray-600">
-            Review your order and continue to payment
+          <p className="text-sm font-semibold uppercase tracking-wide text-green-600">
+            Shopping Bag
           </p>
 
+          <h1 className="mt-1 flex items-center gap-3 text-3xl font-bold text-gray-900">
+            🛒 Your Cart
+          </h1>
+
+          <p className="mt-2 text-gray-500">
+            {cartItems.length} product
+            {cartItems.length !== 1 ? "s" : ""} in your cart
+          </p>
         </div>
 
-        {/* =================================
-            ERROR MESSAGE
-        ================================== */}
-
-        {error && (
-          <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-600">
-
-            <span>⚠️</span>
-
-            <div>
-              <p className="font-semibold">
-                Checkout Error
-              </p>
-
-              <p className="mt-1 text-sm">
-                {error}
-              </p>
-            </div>
-
-          </div>
-        )}
-
-        {/* =================================
-            MAIN GRID
-        ================================== */}
-
+        {/* CART + SUMMARY */}
         <div className="grid gap-6 lg:grid-cols-3">
-
-          {/* =================================
-              LEFT SIDE
-          ================================== */}
-
-          <div className="space-y-6 lg:col-span-2">
-
-            {/* =================================
-                ADDRESS
-            ================================== */}
-
-            <section className="rounded-2xl bg-white p-6 shadow-md">
-
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-                <div>
-
-                  <h2 className="text-xl font-bold text-gray-800">
-                    📍 Delivery Address
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    Select where you want your order delivered
-                  </p>
-
-                </div>
-
-                <button
-                  onClick={() =>
-                    navigate("/addresses")
-                  }
-                  className="text-left text-sm font-semibold text-green-600 hover:text-green-700 sm:text-right"
-                >
-                  Manage Addresses
-                </button>
-
-              </div>
-
-              {/* No Addresses */}
-
-              {addresses.length === 0 ? (
-
-                <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center">
-
-                  <div className="text-4xl">
-                    📍
+          {/* CART ITEMS */}
+          <div className="space-y-5 lg:col-span-2">
+            {Object.entries(groupedItems).map(([storeName, items]) => (
+              <div
+                key={storeName}
+                className="overflow-hidden rounded-2xl bg-white shadow-md"
+              >
+                {/* Store Header */}
+                <div className="flex items-center gap-3 border-b border-gray-200 px-5 py-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
+                    🏪
                   </div>
 
-                  <p className="mt-3 text-gray-500">
-                    No saved addresses found.
-                  </p>
+                  <div>
+                    <h2 className="font-bold text-gray-800">{storeName}</h2>
 
-                  <button
-                    onClick={() =>
-                      navigate("/addresses")
-                    }
-                    className="mt-4 rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white hover:bg-green-700"
-                  >
-                    + Add Address
-                  </button>
-
+                    <p className="text-sm text-gray-500">
+                      {items.length} product
+                      {items.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
                 </div>
 
-              ) : (
-
-                <div className="space-y-3">
-
-                  {addresses.map(
-                    (address) => (
-
-                      <label
-                        key={address.id}
-                        className={`block cursor-pointer rounded-xl border p-4 transition ${
-                          selectedAddressId ===
-                          address.id
-                            ? "border-green-600 bg-green-50"
-                            : "border-gray-200 hover:border-green-300"
-                        }`}
-                      >
-
-                        <div className="flex gap-3">
-
-                          <input
-                            type="radio"
-                            name="address"
-                            checked={
-                              selectedAddressId ===
-                              address.id
-                            }
-                            onChange={() =>
-                              setSelectedAddressId(
-                                address.id
-                              )
-                            }
-                            className="mt-1 h-4 w-4"
-                          />
-
-                          <div className="flex-1">
-
-                            <div className="flex flex-wrap items-center gap-2">
-
-                              <span className="font-bold text-gray-800">
-                                {address.type}
-                              </span>
-
-                              {address.isDefault && (
-                                <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
-                                  Default
-                                </span>
-                              )}
-
-                            </div>
-
-                            <p className="mt-1 font-medium text-gray-700">
-                              {address.name}
-                            </p>
-
-                            <p className="text-sm text-gray-600">
-                              {address.addressLine}
-                            </p>
-
-                            <p className="text-sm text-gray-600">
-                              {address.city},{" "}
-                              {address.state} -{" "}
-                              {address.pincode}
-                            </p>
-
-                            <p className="text-sm text-gray-500">
-                              📞 {address.phone}
-                            </p>
-
-                          </div>
-
-                        </div>
-
-                      </label>
-
-                    )
-                  )}
-
-                </div>
-
-              )}
-
-            </section>
-
-            {/* =================================
-                DELIVERY OPTIONS
-            ================================== */}
-
-            <section className="rounded-2xl bg-white p-6 shadow-md">
-
-              <h2 className="text-xl font-bold text-gray-800">
-                🚚 Delivery Options
-              </h2>
-
-              <p className="mt-1 mb-5 text-sm text-gray-500">
-                Choose your preferred delivery method
-              </p>
-
-              <div className="space-y-3">
-
-                {deliveryOptions.map(
-                  (option) => (
-
-                    <label
-                      key={option.id}
-                      className={`flex cursor-pointer items-center justify-between gap-4 rounded-xl border p-4 transition ${
-                        selectedDelivery ===
-                        option.id
-                          ? "border-green-600 bg-green-50"
-                          : "border-gray-200 hover:border-green-300"
-                      }`}
-                    >
-
-                      <div className="flex items-center gap-3">
-
-                        <input
-                          type="radio"
-                          name="delivery"
-                          value={option.id}
-                          checked={
-                            selectedDelivery ===
-                            option.id
-                          }
-                          onChange={(e) =>
-                            setSelectedDelivery(
-                              e.target.value
-                            )
-                          }
-                          className="h-4 w-4"
-                        />
-
-                        <div>
-
-                          <p className="font-semibold text-gray-800">
-                            {option.name}
-                          </p>
-
-                          <p className="text-sm text-gray-500">
-                            {option.description}
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                      <span className="whitespace-nowrap font-semibold text-green-700">
-
-                        {option.charge === 0
-                          ? "FREE"
-                          : `₹${option.charge}`}
-
-                      </span>
-
-                    </label>
-
-                  )
-                )}
-
-              </div>
-
-              {/* Free Delivery Message */}
-
-              {subtotal >= 300 &&
-                selectedDelivery !==
-                  "pickup" && (
-
-                  <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-medium text-green-700">
-                    🎉 Free delivery applied on orders above ₹300.
-                  </p>
-
-                )}
-
-            </section>
-
-            {/* =================================
-                CART ITEMS
-            ================================== */}
-
-            <section className="rounded-2xl bg-white p-6 shadow-md">
-
-              <div className="mb-5 flex items-center justify-between">
-
-                <h2 className="text-xl font-bold text-gray-800">
-                  🛍️ Your Items
-                </h2>
-
-                <span className="text-sm text-gray-500">
-                  {cartItems.length} item
-                  {cartItems.length !== 1
-                    ? "s"
-                    : ""}
-                </span>
-
-              </div>
-
-              <div className="space-y-4">
-
-                {cartItems.map(
-                  (item) => (
-
+                {/* Products */}
+                <div>
+                  {items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex flex-col gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0 sm:flex-row"
+                      className="flex flex-col gap-4 border-b border-gray-200 p-5 last:border-b-0 sm:flex-row sm:items-center"
                     >
+                      {/* Product Image */}
+                      <div className="flex-shrink-0">
+                        <img
+                          src={item.image || "https://via.placeholder.com/100"}
+                          alt={item.name}
+                          className="h-20 w-20 rounded-xl object-cover"
+                        />
+                      </div>
 
-                      {/* Image */}
-
-                      <img
-                        src={
-                          item.image ||
-                          "https://via.placeholder.com/100"
-                        }
-                        alt={item.name}
-                        className="h-20 w-20 rounded-lg object-cover"
-                      />
-
-                      {/* Details */}
-
+                      {/* Product Details */}
                       <div className="flex-1">
-
                         <h3 className="font-semibold text-gray-800">
                           {item.name}
                         </h3>
 
-                        <p className="text-sm text-gray-500">
-                          {item.storeName ||
-                            "Sri Lakshmi Kirana Store"}
+                        <p className="mt-1 text-sm text-gray-500">
+                          {item.category || "Grocery"}
                         </p>
 
-                        <p className="mt-1 font-semibold text-green-700">
-                          ₹
-                          {Number(
-                            item.price || 0
-                          ).toFixed(2)}
+                        <p className="mt-2 font-semibold text-green-600">
+                          ₹{Number(item.price || 0)}
                         </p>
-
                       </div>
 
-                      {/* Quantity / Total */}
+                      {/* Quantity */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => decreaseQuantity(item.id)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 font-bold text-gray-700 hover:bg-gray-100"
+                        >
+                          −
+                        </button>
 
-                      <div className="flex flex-row items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-between">
+                        <span className="min-w-[25px] text-center font-semibold">
+                          {item.quantity}
+                        </span>
 
+                        <button
+                          onClick={() => increaseQuantity(item.id)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 font-bold text-gray-700 hover:bg-gray-100"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Item Total + Remove */}
+                      <div className="text-right">
                         <p className="font-bold text-gray-800">
                           ₹
                           {(
-                            Number(
-                              item.price || 0
-                            ) *
-                            Number(
-                              item.quantity || 1
-                            )
-                          ).toFixed(2)}
+                            Number(item.price || 0) *
+                            Number(item.quantity || 1)
+                          ).toFixed(0)}
                         </p>
 
-                        <div className="flex items-center gap-2">
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateQuantity(
-                                item.id,
-                                Math.max(
-                                  1,
-                                  Number(
-                                    item.quantity
-                                  ) - 1
-                                )
-                              )
-                            }
-                            className="h-7 w-7 rounded-md bg-gray-100 font-bold hover:bg-gray-200"
-                          >
-                            −
-                          </button>
-
-                          <span className="min-w-[20px] text-center text-sm">
-                            {item.quantity}
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateQuantity(
-                                item.id,
-                                Number(
-                                  item.quantity
-                                ) + 1
-                              )
-                            }
-                            className="h-7 w-7 rounded-md bg-gray-100 font-bold hover:bg-gray-200"
-                          >
-                            +
-                          </button>
-
-                        </div>
-
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="mt-2 text-sm font-medium text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
                       </div>
-
                     </div>
-
-                  )
-                )}
-
+                  ))}
+                </div>
               </div>
+            ))}
 
-            </section>
-
+            {/* Continue Shopping */}
+            <button
+              onClick={() => navigate("/products")}
+              className="font-semibold text-green-700 hover:text-green-800"
+            >
+              ← Continue Shopping
+            </button>
           </div>
 
-          {/* =================================
-              RIGHT SIDE
-          ================================== */}
-
+          {/* ORDER SUMMARY */}
           <div>
-
-            <section className="sticky top-24 rounded-2xl bg-white p-6 shadow-md">
-
-              <h2 className="mb-6 text-xl font-bold text-gray-800">
+            <div className="sticky top-24 rounded-2xl bg-white p-6 shadow-md">
+              <h2 className="text-xl font-bold text-gray-800">
                 Order Summary
               </h2>
 
-              <div className="space-y-4">
+              {/* Coupon */}
+              <div className="mt-5">
+                <p className="mb-2 text-sm font-medium text-gray-600">
+                  Have a coupon?
+                </p>
 
-                {/* Subtotal */}
+                {!appliedCoupon ? (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleApplyCoupon();
+                          }
+                        }}
+                        placeholder="Enter coupon code"
+                        disabled={applyingCoupon}
+                        className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-green-500 disabled:bg-gray-100"
+                      />
 
-                <div className="flex justify-between text-gray-600">
+                      <button
+                        onClick={handleApplyCoupon}
+                        disabled={applyingCoupon}
+                        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {applyingCoupon ? "Applying..." : "Apply"}
+                      </button>
+                    </div>
 
-                  <span>
-                    Subtotal
-                  </span>
+                    {couponError && (
+                      <p className="mt-2 text-xs text-red-500">
+                        {couponError}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg bg-green-50 p-3">
+                    <div>
+                      <p className="text-sm font-semibold text-green-700">
+                        🎉 {appliedCoupon}
+                      </p>
 
-                  <span>
-                    ₹{subtotal.toFixed(2)}
-                  </span>
+                      <p className="text-xs text-green-600">
+                        Coupon applied successfully
+                      </p>
+                    </div>
 
-                </div>
-
-                {/* Delivery */}
-
-                <div className="flex justify-between text-gray-600">
-
-                  <span>
-                    Delivery
-                  </span>
-
-                  <span
-                    className={
-                      deliveryCharge === 0
-                        ? "font-semibold text-green-600"
-                        : ""
-                    }
-                  >
-                    {deliveryCharge === 0
-                      ? "FREE"
-                      : `₹${deliveryCharge.toFixed(
-                          2
-                        )}`}
-                  </span>
-
-                </div>
-
-                {/* Discount */}
-
-                <div className="flex justify-between text-gray-600">
-
-                  <span>
-                    Discount
-                  </span>
-
-                  <span className="text-green-600">
-                    {discount > 0
-                      ? `-₹${discount.toFixed(
-                          2
-                        )}`
-                      : "₹0.00"}
-                  </span>
-
-                </div>
-
-                {/* Total */}
-
-                <div className="border-t pt-4">
-
-                  <div className="flex justify-between text-lg font-bold text-gray-800">
-
-                    <span>
-                      Total
-                    </span>
-
-                    <span className="text-green-700">
-                      ₹{finalTotal.toFixed(2)}
-                    </span>
-
+                    <button
+                      onClick={handleRemoveCoupon}
+                      className="text-xs font-semibold text-red-500 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
                   </div>
-
-                </div>
-
+                )}
               </div>
 
-              {/* Selected Address */}
+              {/* Divider */}
+              <div className="my-5 border-t border-gray-200" />
 
-              {selectedAddress && (
+              {/* Subtotal */}
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Subtotal</span>
+                <span>₹{subtotal.toFixed(0)}</span>
+              </div>
 
-                <div className="mt-6 rounded-xl bg-gray-50 p-4">
+              {/* Delivery */}
+              <div className="mt-4 flex justify-between text-sm text-gray-600">
+                <span>Delivery</span>
 
-                  <p className="mb-1 text-sm font-semibold text-gray-800">
-                    Delivering to
-                  </p>
+                <span
+                  className={delivery === 0 ? "font-semibold text-green-600" : ""}
+                >
+                  {delivery === 0 ? "FREE" : `₹${delivery}`}
+                </span>
+              </div>
 
-                  <p className="text-sm text-gray-600">
-                    {selectedAddress.name}
-                  </p>
+              {/* Discount */}
+              {discount > 0 && (
+                <div className="mt-4 flex justify-between text-sm">
+                  <span className="text-gray-600">Discount</span>
 
-                  <p className="text-sm text-gray-500">
-                    {selectedAddress.city},{" "}
-                    {selectedAddress.pincode}
-                  </p>
-
+                  <span className="font-semibold text-green-600">
+                    -₹{discount.toFixed(0)}
+                  </span>
                 </div>
-
               )}
 
-              {/* Continue to Payment */}
+              {/* Divider */}
+              <div className="my-5 border-t border-gray-200" />
 
+              {/* Total */}
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold text-gray-800">Total</span>
+
+                <span className="text-xl font-bold text-green-700">
+                  ₹{finalTotal.toFixed(0)}
+                </span>
+              </div>
+
+              {/* CHECKOUT BUTTON */}
               <button
                 type="button"
-                onClick={handleContinueToPayment}
-                className="mt-6 w-full rounded-xl bg-green-600 py-4 font-bold text-white transition hover:bg-green-700"
+                onClick={handleCheckout}
+                disabled={cartItems.length === 0}
+                className="mt-6 w-full rounded-xl bg-green-600 py-4 font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Continue to Payment • ₹
-                {finalTotal.toFixed(2)}
+                Proceed to Checkout →
               </button>
 
-              {/* Back */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate("/cart")
-                }
-                className="mt-3 w-full rounded-xl border border-gray-300 py-3 font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Back to Cart
-              </button>
-
-              <p className="mt-4 text-center text-xs text-gray-400">
+              <p className="mt-3 text-center text-xs text-gray-400">
                 🔒 Secure checkout
               </p>
-
-            </section>
-
+            </div>
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }
 
-export default Checkout;
+export default Cart;

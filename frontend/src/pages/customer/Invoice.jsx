@@ -1,277 +1,147 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+function getToken() {
+  return localStorage.getItem("token");
+}
+
+function getSavedOrder() {
+  try {
+    return JSON.parse(localStorage.getItem("kirana_last_order") || "null");
+  } catch {
+    return null;
+  }
+}
 
 function Invoice() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { orderId: paramOrderId } = useParams();
 
-  const order =
-    location.state?.order ||
-    JSON.parse(
-      localStorage.getItem(
-        "kirana_last_order"
-      ) || "null"
-    );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
 
-  if (!order) {
-    return (
-      <div className="min-h-screen bg-green-50 p-10 text-center">
-        <h1 className="text-2xl font-bold">
-          Invoice Not Found
-        </h1>
+  const savedOrder = location.state?.order || getSavedOrder();
 
-        <button
-          onClick={() =>
-            navigate("/orders")
-          }
-          className="mt-5 rounded-lg bg-green-600 px-6 py-3 text-white"
-        >
-          My Orders
-        </button>
-      </div>
-    );
-  }
+  const orderId =
+    paramOrderId ||
+    savedOrder?.backendOrderId ||
+    savedOrder?.orderId ||
+    savedOrder?.id;
 
-  const handlePrint = () => {
-    window.print();
-  };
+  useEffect(() => {
+    let objectUrl = "";
+    let cancelled = false;
+
+    async function fetchInvoice() {
+      setLoading(true);
+      setError("");
+      setPdfUrl("");
+
+      if (!orderId) {
+        setError("No order specified.");
+        setLoading(false);
+        return;
+      }
+
+      const token = getToken();
+      if (!token) {
+        setError("Please login to view this invoice.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/orders/${orderId}/invoice`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => null);
+          throw new Error(errData?.message || "Unable to load invoice.");
+        }
+
+        const blob = await response.blob();
+        const pdfBlob = new Blob([blob], { type: "application/pdf" });
+        objectUrl = URL.createObjectURL(pdfBlob);
+
+        if (!cancelled) {
+          setPdfUrl(objectUrl);
+        }
+      } catch (err) {
+        console.error("Invoice fetch failed:", err);
+        if (!cancelled) {
+          setError(err.message || "Unable to load invoice.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchInvoice();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [orderId]);
 
   return (
-    <div className="min-h-screen bg-gray-100 px-4 py-8">
-
+    <div className="min-h-screen bg-green-50 px-4 py-8">
       <div className="mx-auto max-w-4xl">
-
-        <div className="mb-5 flex justify-between print:hidden">
-
+        <div className="mb-5 flex items-center justify-between">
           <button
-            onClick={() =>
-              navigate(-1)
-            }
-            className="font-semibold text-green-700"
+            onClick={() => navigate("/orders")}
+            className="font-semibold text-green-700 hover:text-green-800"
           >
-            ← Back
+            ← Back to My Orders
           </button>
 
-          <button
-            onClick={handlePrint}
-            className="rounded-lg bg-green-600 px-5 py-2 font-semibold text-white"
-          >
-            🖨️ Print / Save PDF
-          </button>
-
+          {pdfUrl && (
+            <a
+              href={pdfUrl}
+              download={`invoice-${orderId}.pdf`}
+              className="rounded-lg bg-green-600 px-5 py-2 font-semibold text-white hover:bg-green-700"
+            >
+              ⬇ Download PDF
+            </a>
+          )}
         </div>
 
-        <div className="bg-white p-8 shadow print:shadow-none">
-
-          <div className="flex flex-col justify-between gap-5 border-b pb-6 sm:flex-row">
-
-            <div>
-              <h1 className="text-3xl font-bold text-green-700">
-                Kirana Marketplace
-              </h1>
-
-              <p className="mt-1 text-gray-500">
-                Grocery & Daily Essentials
-              </p>
-            </div>
-
-            <div className="sm:text-right">
-              <h2 className="text-2xl font-bold">
-                INVOICE
-              </h2>
-
-              <p className="mt-2 text-sm text-gray-500">
-                Order ID: {order.orderId}
-              </p>
-
-              <p className="text-sm text-gray-500">
-                {order.createdAt
-                  ? new Date(
-                      order.createdAt
-                    ).toLocaleDateString(
-                      "en-IN"
-                    )
-                  : ""}
-              </p>
-            </div>
-
+        {loading && (
+          <div className="rounded-2xl bg-white p-10 text-center shadow-md">
+            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-600"></div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Preparing your invoice...
+            </h1>
           </div>
+        )}
 
-          {/* ADDRESS */}
-
-          <div className="grid gap-6 border-b py-6 sm:grid-cols-2">
-
-            <div>
-              <p className="mb-2 text-sm font-semibold text-gray-500">
-                BILL TO
-              </p>
-
-              <p className="font-semibold">
-                {order.address?.name}
-              </p>
-
-              <p className="text-sm text-gray-600">
-                {order.address?.addressLine}
-              </p>
-
-              <p className="text-sm text-gray-600">
-                {order.address?.city},{" "}
-                {order.address?.state} -{" "}
-                {order.address?.pincode}
-              </p>
-
-              <p className="text-sm text-gray-600">
-                Phone: {order.address?.phone}
-              </p>
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-semibold text-gray-500">
-                PAYMENT
-              </p>
-
-              <p className="text-sm">
-                Method:{" "}
-                <strong>
-                  {order.paymentMethod ||
-                    "Pending"}
-                </strong>
-              </p>
-
-              <p className="text-sm">
-                Status:{" "}
-                <strong className="text-green-600">
-                  {order.paymentStatus ||
-                    "Pending"}
-                </strong>
-              </p>
-            </div>
-
+        {!loading && error && (
+          <div className="rounded-2xl bg-white p-10 text-center shadow-md">
+            <div className="mb-4 text-5xl">📄</div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Unable to Load Invoice
+            </h1>
+            <p className="mt-2 text-gray-500">{error}</p>
           </div>
+        )}
 
-          {/* ITEMS */}
-
-          <div className="py-6">
-
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b text-sm text-gray-500">
-                  <th className="pb-3">
-                    Product
-                  </th>
-
-                  <th className="pb-3 text-center">
-                    Qty
-                  </th>
-
-                  <th className="pb-3 text-right">
-                    Price
-                  </th>
-
-                  <th className="pb-3 text-right">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {order.items?.map(
-                  (item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b"
-                    >
-                      <td className="py-4">
-                        {item.name}
-                      </td>
-
-                      <td className="py-4 text-center">
-                        {item.quantity}
-                      </td>
-
-                      <td className="py-4 text-right">
-                        ₹
-                        {Number(
-                          item.price || 0
-                        ).toFixed(2)}
-                      </td>
-
-                      <td className="py-4 text-right">
-                        ₹
-                        {(
-                          Number(
-                            item.price || 0
-                          ) *
-                          Number(
-                            item.quantity || 1
-                          )
-                        ).toFixed(2)}
-                      </td>
-                    </tr>
-                  )
-                )}
-
-              </tbody>
-            </table>
-
+        {!loading && !error && pdfUrl && (
+          <div className="overflow-hidden rounded-2xl bg-white shadow-md">
+            <iframe
+              title={`Invoice ${orderId}`}
+              src={pdfUrl}
+              className="h-[80vh] w-full"
+            />
           </div>
-
-          {/* TOTAL */}
-
-          <div className="ml-auto max-w-sm space-y-3 border-t pt-5">
-
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-
-              <span>
-                ₹
-                {Number(
-                  order.subtotal || 0
-                ).toFixed(2)}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span>Delivery</span>
-
-              <span>
-                ₹
-                {Number(
-                  order.deliveryCharge || 0
-                ).toFixed(2)}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span>Discount</span>
-
-              <span className="text-green-600">
-                -₹
-                {Number(
-                  order.discount || 0
-                ).toFixed(2)}
-              </span>
-            </div>
-
-            <div className="flex justify-between border-t pt-3 text-xl font-bold">
-              <span>Total</span>
-
-              <span className="text-green-700">
-                ₹
-                {Number(
-                  order.total || 0
-                ).toFixed(2)}
-              </span>
-            </div>
-
-          </div>
-
-          <div className="mt-10 border-t pt-5 text-center text-sm text-gray-500">
-            Thank you for shopping with Kirana Marketplace!
-          </div>
-
-        </div>
-
+        )}
       </div>
     </div>
   );

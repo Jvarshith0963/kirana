@@ -4,7 +4,7 @@ const { authenticate, authorize } = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
-router.use(authenticate, authorize("vendor", "admin"));
+router.use(authenticate, authorize("vendor"));
 
 router.get("/", listVendorOrders);
 router.patch("/:id/accept", acceptOrder);

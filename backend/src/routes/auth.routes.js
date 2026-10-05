@@ -23,8 +23,21 @@ const authLimiter = rateLimit({
 const validate = require("../middleware/validate.middleware");
 const { validateRegister, validateLogin } = require("../validators/auth.validators");
 
-router.post('/register', authLimiter, register);
-router.post('/login', authLimiter, login);
+router.post(
+  "/register",
+  authLimiter,
+  validateRegister,
+  validate,
+  register
+);
+
+router.post(
+  "/login",
+  authLimiter,
+  validateLogin,
+  validate,
+  login
+);
 router.post('/logout', logout);
 router.post('/forgot-password', authLimiter, forgotPassword);
 router.post('/reset-password', authLimiter, resetPassword);

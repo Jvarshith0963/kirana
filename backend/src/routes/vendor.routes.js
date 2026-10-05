@@ -13,7 +13,7 @@ const {
 
 const router = express.Router();
 
-router.use(authenticate, authorize("vendor", "admin"));
+router.use(authenticate, authorize("vendor"));
 
 router.get("/dashboard", getDashboardSummary);
 router.get("/sales", getSalesReport);

@@ -1,6 +1,11 @@
-const pool = require("../config/db");
 const crypto = require("crypto");
+
+const pool = require("../config/db");
 const razorpay = require("../config/razorpay");
+
+// ============================================================
+// Generic payment helpers
+// ============================================================
 
 const createPayment = async ({
   orderId,
@@ -66,7 +71,7 @@ const updatePaymentStatus = async ({
       updated_at = CURRENT_TIMESTAMP,
       paid_at = CASE
         WHEN $1 = 'success'
-        THEN CURRENT_TIMESTAMP
+          THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
         ELSE paid_at
       END
     WHERE id = $2
@@ -80,7 +85,7 @@ const updatePaymentStatus = async ({
 
   return rows[0] || null;
 };
-//update razorpay details after payment verification
+
 const updateRazorpayDetails = async ({
   paymentId,
   razorpayOrderId,
@@ -110,7 +115,95 @@ const updateRazorpayDetails = async ({
   return rows[0] || null;
 };
 
-const createCodPayment = async ({
+// ============================================================
+// Order + amount validation helper
+// ============================================================
+
+const getValidatedOrder = async (
+  client,
+  orderId,
+  customerId
+) => {
+  const orderQuery = `
+    SELECT
+      id,
+      customer_id,
+      total_amount,
+      status,
+      payment_status
+    FROM orders
+    WHERE id = $1
+      AND customer_id = $2
+    FOR UPDATE;
+  `;
+
+  const orderResult = await client.query(
+    orderQuery,
+    [orderId, customerId]
+  );
+
+  if (orderResult.rows.length === 0) {
+    throw new Error("Order not found");
+  }
+
+  const order = orderResult.rows[0];
+
+  if (order.status === "cancelled") {
+    throw new Error("Cancelled orders cannot be paid");
+  }
+
+  if (order.status === "delivered") {
+    throw new Error("Order has already been delivered");
+  }
+
+  const amountQuery = `
+    SELECT
+      COALESCE(
+        SUM(quantity * unit_price),
+        0
+      ) AS calculated_amount
+    FROM order_items
+    WHERE order_id = $1;
+  `;
+
+  const amountResult = await client.query(
+    amountQuery,
+    [orderId]
+  );
+
+  const calculatedAmount = Number(
+    amountResult.rows[0].calculated_amount
+  );
+
+  const orderAmount = Number(order.total_amount);
+
+  if (
+    Math.abs(
+      calculatedAmount - orderAmount
+    ) > 0.01
+  ) {
+    throw new Error(
+      "Order total does not match order items"
+    );
+  }
+
+  if (calculatedAmount <= 0) {
+    throw new Error(
+      "Order amount must be greater than zero"
+    );
+  }
+
+  return {
+    order,
+    calculatedAmount,
+  };
+};
+
+// ============================================================
+// CREATE RAZORPAY ORDER
+// ============================================================
+
+const createRazorpayOrder = async ({
   orderId,
   customerId,
 }) => {
@@ -119,142 +212,162 @@ const createCodPayment = async ({
   try {
     await client.query("BEGIN");
 
-    // 1. Get the order belonging to the authenticated customer
-    const orderQuery = `
-      SELECT
-        id,
-        customer_id,
-        total_amount,
-        status,
-        payment_status
-      FROM orders
-      WHERE id = $1
-        AND customer_id = $2
-      FOR UPDATE;
-    `;
-
-    const orderResult = await client.query(
-      orderQuery,
-      [orderId, customerId]
+    const {
+      order,
+      calculatedAmount,
+    } = await getValidatedOrder(
+      client,
+      orderId,
+      customerId
     );
 
-    if (orderResult.rows.length === 0) {
-      throw new Error("Order not found");
-    }
+    // --------------------------------------------------------
+    // Check existing payment
+    // --------------------------------------------------------
 
-    const order = orderResult.rows[0];
-
-    // 2. Validate order status
-    if (order.status === "cancelled") {
-      throw new Error(
-        "Cancelled orders cannot be paid"
-      );
-    }
-
-    if (order.status === "delivered") {
-      throw new Error(
-        "Order has already been delivered"
-      );
-    }
-
-    // 3. Check whether payment already exists
     const existingPaymentQuery = `
-      SELECT id
+      SELECT *
       FROM payments
       WHERE order_id = $1
       FOR UPDATE;
     `;
 
-    const existingPaymentResult = await client.query(
-      existingPaymentQuery,
-      [orderId]
-    );
-
-    if (existingPaymentResult.rows.length > 0) {
-      throw new Error(
-        "Payment already exists for this order"
+    const existingPaymentResult =
+      await client.query(
+        existingPaymentQuery,
+        [orderId]
       );
-    }
 
-    // 4. Recalculate total from order items
-    const amountQuery = `
-      SELECT
-        COALESCE(
-          SUM(quantity * unit_price),
-          0
-        ) AS calculated_amount
-      FROM order_items
-      WHERE order_id = $1;
-    `;
+    const existingPayment =
+      existingPaymentResult.rows[0] || null;
 
-    const amountResult = await client.query(
-      amountQuery,
-      [orderId]
-    );
-
-    const calculatedAmount = Number(
-      amountResult.rows[0].calculated_amount
-    );
-
-    const orderAmount = Number(order.total_amount);
-
-    // 5. Verify order total
     if (
-      Math.abs(
-        calculatedAmount - orderAmount
-      ) > 0.01
+      existingPayment &&
+      existingPayment.status === "success"
     ) {
       throw new Error(
-        "Order total does not match order items"
+        "Payment already completed for this order"
       );
     }
 
-    // 6. Ensure amount is valid
-    if (calculatedAmount <= 0) {
+    if (
+      existingPayment &&
+      existingPayment.status === "refunded"
+    ) {
       throw new Error(
-        "Order amount must be greater than zero"
+        "Refunded payments cannot be paid again"
       );
     }
 
-    // 7. Create COD payment
-    const paymentQuery = `
-      INSERT INTO payments (
-        order_id,
-        payment_method,
-        amount,
-        status
-      )
-      VALUES ($1, $2, $3, $4)
-      RETURNING *;
-    `;
+    if (
+      existingPayment &&
+      existingPayment.payment_method ===
+        "cash_on_delivery"
+    ) {
+      throw new Error(
+        "Cash on Delivery is already selected for this order"
+      );
+    }
 
-    const paymentResult = await client.query(
-      paymentQuery,
-      [
-        orderId,
-        "cash_on_delivery",
-        calculatedAmount,
-        "cod_pending",
-      ]
+    // --------------------------------------------------------
+    // Razorpay amount must be in paise
+    // --------------------------------------------------------
+
+    const amountInPaise = Math.round(
+      calculatedAmount * 100
     );
 
-    // 8. Keep order payment status pending
-    const updateOrderQuery = `
-      UPDATE orders
-      SET
-        payment_status = 'pending',
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1;
-    `;
+    // --------------------------------------------------------
+    // Create Razorpay order
+    // --------------------------------------------------------
 
-    await client.query(
-      updateOrderQuery,
-      [orderId]
-    );
+    const razorpayOrder =
+      await razorpay.orders.create({
+        amount: amountInPaise,
+        currency: "INR",
+        receipt: `order_${orderId}`,
+      });
+
+    let payment;
+
+    // --------------------------------------------------------
+    // Retry an existing failed/pending payment
+    // --------------------------------------------------------
+
+    if (existingPayment) {
+      const updatePaymentQuery = `
+        UPDATE payments
+        SET
+          payment_method = 'razorpay',
+          amount = $1,
+          status = 'pending',
+          transaction_id = NULL,
+          razorpay_order_id = $2,
+          razorpay_payment_id = NULL,
+          razorpay_signature = NULL,
+          paid_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING *;
+      `;
+
+      const updatedResult =
+        await client.query(
+          updatePaymentQuery,
+          [
+            calculatedAmount,
+            razorpayOrder.id,
+            existingPayment.id,
+          ]
+        );
+
+      payment = updatedResult.rows[0];
+    } else {
+      // ------------------------------------------------------
+      // First Razorpay payment attempt
+      // ------------------------------------------------------
+
+      const paymentQuery = `
+        INSERT INTO payments (
+          order_id,
+          payment_method,
+          amount,
+          status,
+          razorpay_order_id
+        )
+        VALUES (
+          $1,
+          'razorpay',
+          $2,
+          'pending',
+          $3
+        )
+        RETURNING *;
+      `;
+
+      const paymentResult =
+        await client.query(
+          paymentQuery,
+          [
+            order.id,
+            calculatedAmount,
+            razorpayOrder.id,
+          ]
+        );
+
+      payment = paymentResult.rows[0];
+    }
 
     await client.query("COMMIT");
 
-    return paymentResult.rows[0];
+    return {
+      payment,
+      razorpayOrder: {
+        id: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+      },
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -263,18 +376,10 @@ const createCodPayment = async ({
   }
 };
 
-module.exports = {
-  createPayment,
-  getPaymentByOrderId,
-  getPaymentById,
-  updatePaymentStatus,
-  updateRazorpayDetails,
-  createCodPayment,
-};
+// ============================================================
+// VERIFY RAZORPAY PAYMENT
+// ============================================================
 
-
-
-//verify razorpay payment
 const verifyRazorpayPayment = async ({
   orderId,
   customerId,
@@ -283,11 +388,20 @@ const verifyRazorpayPayment = async ({
   razorpaySignature,
 }) => {
   if (
+    !orderId ||
     !razorpayOrderId ||
     !razorpayPaymentId ||
     !razorpaySignature
   ) {
-    throw new Error("Missing Razorpay payment details");
+    throw new Error(
+      "Missing Razorpay payment details"
+    );
+  }
+
+  if (!process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error(
+      "RAZORPAY_KEY_SECRET is not configured"
+    );
   }
 
   const client = await pool.connect();
@@ -295,36 +409,23 @@ const verifyRazorpayPayment = async ({
   try {
     await client.query("BEGIN");
 
-    /*
-     * 1. Get the order belonging to the authenticated customer
-     */
-    const orderQuery = `
-      SELECT
-        id,
-        customer_id,
-        total_amount,
-        status,
-        payment_status
-      FROM orders
-      WHERE id = $1
-        AND customer_id = $2
-      FOR UPDATE;
-    `;
+    // --------------------------------------------------------
+    // 1. Verify order ownership
+    // --------------------------------------------------------
 
-    const orderResult = await client.query(
-      orderQuery,
-      [orderId, customerId]
+    const {
+      order,
+      calculatedAmount,
+    } = await getValidatedOrder(
+      client,
+      orderId,
+      customerId
     );
 
-    if (orderResult.rows.length === 0) {
-      throw new Error("Order not found");
-    }
+    // --------------------------------------------------------
+    // 2. Find local payment
+    // --------------------------------------------------------
 
-    const order = orderResult.rows[0];
-
-    /*
-     * 2. Get the local payment
-     */
     const paymentQuery = `
       SELECT *
       FROM payments
@@ -333,74 +434,66 @@ const verifyRazorpayPayment = async ({
       FOR UPDATE;
     `;
 
-    const paymentResult = await client.query(
-      paymentQuery,
-      [orderId]
-    );
+    const paymentResult =
+      await client.query(
+        paymentQuery,
+        [orderId]
+      );
 
     if (paymentResult.rows.length === 0) {
-      throw new Error("Payment record not found");
+      throw new Error(
+        "Payment record not found"
+      );
     }
 
-    const payment = paymentResult.rows[0];
+    const payment =
+      paymentResult.rows[0];
 
-    /*
-     * 3. Make sure the Razorpay order belongs
-     *    to our local payment record.
-     */
+    // --------------------------------------------------------
+    // 3. Verify Razorpay order ID
+    // --------------------------------------------------------
+
     if (
-      payment.razorpay_order_id !== razorpayOrderId
+      payment.razorpay_order_id !==
+      razorpayOrderId
     ) {
       throw new Error(
         "Razorpay order ID does not match"
       );
     }
 
-    /*
-     * 4. Prevent payment from being verified twice
-     */
+    // --------------------------------------------------------
+    // 4. Idempotency
+    // --------------------------------------------------------
+
     if (payment.status === "success") {
-      throw new Error(
-        "Payment has already been verified"
-      );
+      await client.query("COMMIT");
+
+      return {
+        payment,
+        order: {
+          id: order.id,
+          total_amount: order.total_amount,
+          payment_status:
+            order.payment_status,
+          status: order.status,
+        },
+        alreadyVerified: true,
+      };
     }
 
-    /*
-     * 5. Recalculate the order amount from
-     *    order_items.
-     *
-     *    NEVER trust amount from frontend.
-     */
-    const amountQuery = `
-      SELECT
-        COALESCE(
-          SUM(quantity * unit_price),
-          0
-        ) AS calculated_amount
-      FROM order_items
-      WHERE order_id = $1;
-    `;
+    // --------------------------------------------------------
+    // 5. Verify amounts server-side
+    // --------------------------------------------------------
 
-    const amountResult = await client.query(
-      amountQuery,
-      [orderId]
-    );
-
-    const calculatedAmount = Number(
-      amountResult.rows[0].calculated_amount
+    const paymentAmount = Number(
+      payment.amount
     );
 
     const orderAmount = Number(
       order.total_amount
     );
 
-    const paymentAmount = Number(
-      payment.amount
-    );
-
-    /*
-     * 6. Verify order total
-     */
     if (
       Math.abs(
         calculatedAmount - orderAmount
@@ -411,9 +504,6 @@ const verifyRazorpayPayment = async ({
       );
     }
 
-    /*
-     * 7. Verify payment amount
-     */
     if (
       Math.abs(
         calculatedAmount - paymentAmount
@@ -424,17 +514,11 @@ const verifyRazorpayPayment = async ({
       );
     }
 
-    /*
-     * 8. Generate expected Razorpay signature
-     *
-     * Razorpay signature:
-     *
-     * HMAC_SHA256(
-     *   razorpay_order_id + "|" + razorpay_payment_id,
-     *   RAZORPAY_KEY_SECRET
-     * )
-     */
-    const body =
+    // --------------------------------------------------------
+    // 6. Generate expected signature
+    // --------------------------------------------------------
+
+    const signatureBody =
       `${razorpayOrderId}|${razorpayPaymentId}`;
 
     const expectedSignature =
@@ -443,17 +527,24 @@ const verifyRazorpayPayment = async ({
           "sha256",
           process.env.RAZORPAY_KEY_SECRET
         )
-        .update(body)
+        .update(signatureBody)
         .digest("hex");
 
-    /*
-     * 9. Safely compare signatures
-     */
+    // --------------------------------------------------------
+    // 7. Timing-safe comparison
+    // --------------------------------------------------------
+
     const expectedBuffer =
-      Buffer.from(expectedSignature, "utf8");
+      Buffer.from(
+        expectedSignature,
+        "utf8"
+      );
 
     const receivedBuffer =
-      Buffer.from(razorpaySignature, "utf8");
+      Buffer.from(
+        razorpaySignature,
+        "utf8"
+      );
 
     if (
       expectedBuffer.length !==
@@ -476,9 +567,10 @@ const verifyRazorpayPayment = async ({
       );
     }
 
-    /*
-     * 10. Save Razorpay payment details
-     */
+    // --------------------------------------------------------
+    // 8. Mark payment successful
+    // --------------------------------------------------------
+
     const updatePaymentQuery = `
       UPDATE payments
       SET
@@ -503,9 +595,10 @@ const verifyRazorpayPayment = async ({
         ]
       );
 
-    /*
-     * 11. Mark the order as paid
-     */
+    // --------------------------------------------------------
+    // 9. Mark order paid
+    // --------------------------------------------------------
+
     const updateOrderQuery = `
       UPDATE orders
       SET
@@ -529,8 +622,11 @@ const verifyRazorpayPayment = async ({
     await client.query("COMMIT");
 
     return {
-      payment: updatedPaymentResult.rows[0],
-      order: updatedOrderResult.rows[0],
+      payment:
+        updatedPaymentResult.rows[0],
+      order:
+        updatedOrderResult.rows[0],
+      alreadyVerified: false,
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -540,9 +636,11 @@ const verifyRazorpayPayment = async ({
   }
 };
 
-//create razorpay order
+// ============================================================
+// CREATE COD PAYMENT
+// ============================================================
 
-const createRazorpayOrder = async ({
+const createCodPayment = async ({
   orderId,
   customerId,
 }) => {
@@ -551,150 +649,138 @@ const createRazorpayOrder = async ({
   try {
     await client.query("BEGIN");
 
-    // Get order belonging to authenticated customer
-    const orderQuery = `
-      SELECT
-        id,
-        customer_id,
-        total_amount,
-        status,
-        payment_status
-      FROM orders
-      WHERE id = $1
-        AND customer_id = $2
-      FOR UPDATE;
-    `;
-
-    const orderResult = await client.query(
-      orderQuery,
-      [orderId, customerId]
+    const {
+      order,
+      calculatedAmount,
+    } = await getValidatedOrder(
+      client,
+      orderId,
+      customerId
     );
 
-    if (orderResult.rows.length === 0) {
-      throw new Error("Order not found");
-    }
+    // --------------------------------------------------------
+    // Existing payment
+    // --------------------------------------------------------
 
-    const order = orderResult.rows[0];
-
-    if (order.status === "cancelled") {
-      throw new Error(
-        "Cancelled orders cannot be paid"
-      );
-    }
-
-    if (order.status === "delivered") {
-      throw new Error(
-        "Order has already been delivered"
-      );
-    }
-
-    // Prevent duplicate payment
     const existingPaymentQuery = `
-      SELECT id
+      SELECT *
       FROM payments
       WHERE order_id = $1
       FOR UPDATE;
     `;
 
-    const existingPaymentResult = await client.query(
-      existingPaymentQuery,
-      [orderId]
-    );
-
-    if (existingPaymentResult.rows.length > 0) {
-      throw new Error(
-        "Payment already exists for this order"
+    const existingPaymentResult =
+      await client.query(
+        existingPaymentQuery,
+        [orderId]
       );
-    }
 
-    // Calculate amount from order items
-    const amountQuery = `
-      SELECT
-        COALESCE(
-          SUM(quantity * unit_price),
-          0
-        ) AS calculated_amount
-      FROM order_items
-      WHERE order_id = $1;
-    `;
+    const existingPayment =
+      existingPaymentResult.rows[0] || null;
 
-    const amountResult = await client.query(
-      amountQuery,
-      [orderId]
-    );
-
-    const calculatedAmount = Number(
-      amountResult.rows[0].calculated_amount
-    );
-
-    const orderAmount = Number(
-      order.total_amount
-    );
-
-    // Verify order total
     if (
-      Math.abs(
-        calculatedAmount - orderAmount
-      ) > 0.01
+      existingPayment &&
+      existingPayment.status === "success"
     ) {
       throw new Error(
-        "Order total does not match order items"
+        "This order has already been paid"
       );
     }
 
-    if (calculatedAmount <= 0) {
+    if (
+      existingPayment &&
+      existingPayment.status === "refunded"
+    ) {
       throw new Error(
-        "Order amount must be greater than zero"
+        "Refunded orders cannot use COD"
       );
     }
 
-    // Razorpay requires paise
-    const amountInPaise = Math.round(
-      calculatedAmount * 100
-    );
+    let payment;
 
-    // Create Razorpay order
-    const razorpayOrder =
-      await razorpay.orders.create({
-        amount: amountInPaise,
-        currency: "INR",
-        receipt: `order_${orderId}`,
-      });
+    if (
+      existingPayment &&
+      existingPayment.payment_method ===
+        "cash_on_delivery" &&
+      existingPayment.status === "cod_pending"
+    ) {
+      payment = existingPayment;
+    } else if (existingPayment) {
+      // Allow switching from a failed/pending
+      // Razorpay attempt to COD.
+      const updatePaymentQuery = `
+        UPDATE payments
+        SET
+          payment_method = 'cash_on_delivery',
+          amount = $1,
+          status = 'cod_pending',
+          transaction_id = NULL,
+          razorpay_order_id = NULL,
+          razorpay_payment_id = NULL,
+          razorpay_signature = NULL,
+          paid_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING *;
+      `;
 
-    // Create local payment
-    const paymentQuery = `
-      INSERT INTO payments (
-        order_id,
-        payment_method,
-        amount,
-        status,
-        razorpay_order_id
-      )
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *;
-    `;
+      const updateResult =
+        await client.query(
+          updatePaymentQuery,
+          [
+            calculatedAmount,
+            existingPayment.id,
+          ]
+        );
 
-    const paymentResult = await client.query(
-      paymentQuery,
-      [
-        orderId,
-        "razorpay",
-        calculatedAmount,
-        "pending",
-        razorpayOrder.id,
-      ]
+      payment = updateResult.rows[0];
+    } else {
+      const paymentQuery = `
+        INSERT INTO payments (
+          order_id,
+          payment_method,
+          amount,
+          status
+        )
+        VALUES (
+          $1,
+          'cash_on_delivery',
+          $2,
+          'cod_pending'
+        )
+        RETURNING *;
+      `;
+
+      const paymentResult =
+        await client.query(
+          paymentQuery,
+          [
+            orderId,
+            calculatedAmount,
+          ]
+        );
+
+      payment = paymentResult.rows[0];
+    }
+
+    // --------------------------------------------------------
+    // Keep order payment status pending
+    // --------------------------------------------------------
+
+    await client.query(
+      `
+        UPDATE orders
+        SET
+          payment_status = 'pending',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1;
+      `,
+      [orderId]
     );
 
     await client.query("COMMIT");
 
-    return {
-      payment: paymentResult.rows[0],
-      razorpayOrder: {
-        id: razorpayOrder.id,
-        amount: razorpayOrder.amount,
-        currency: razorpayOrder.currency,
-      },
-    };
+    return payment;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
