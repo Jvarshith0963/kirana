@@ -36,7 +36,7 @@ const initialProducts = [
     stock: 0,
     discount: 0,
     image:
-      "https://images.unsplash.com/photo-1518110925495-5fe2c3c0b6b0?auto=format&fit=crop&w=500&q=80",
+      "https://images.unsplash.com/photo-1558394299-f2e6198506a6?auto=format&fit=crop&w=500&q=80",
     active: false,
   },
 ];

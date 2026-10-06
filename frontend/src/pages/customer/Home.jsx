@@ -76,7 +76,7 @@ function Home() {
       price: 30,
       category: "Groceries",
       image:
-        "https://images.unsplash.com/photo-1518110925495-5c3b0f7a4f2b?auto=format&fit=crop&w=600&q=80",
+        "https://5.imimg.com/data5/CF/SS/GLADMIN-38220085/tata-salt-1000x1000.png",
       rating: 4.4,
       popular: true,
     },
