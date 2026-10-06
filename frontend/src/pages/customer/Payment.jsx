@@ -1,6 +1,24 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+const getAccessToken = () => {
+  return (
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("authToken")
+  );
+};
+
+const getBackendOrderId = (order) => {
+  return (
+    order?.orders?.[0]?.id ||
+    order?.backendOrderId ||
+    order?.id
+  );
+};
 const PAYMENT_METHODS = [
   {
     id: "upi",
@@ -20,12 +38,7 @@ const PAYMENT_METHODS = [
     description: "All major banks",
     icon: "🏦",
   },
-  {
-    id: "wallet",
-    name: "Wallet",
-    description: "Paytm, Mobikwik & more",
-    icon: "👛",
-  },
+ 
   {
     id: "cod",
     name: "Cash on Delivery",
@@ -74,13 +87,55 @@ function Payment() {
     });
   };
 
-  const handleCOD = () => {
+const handleCOD = async () => {
+  setError("");
+  setProcessing(true);
+
+  try {
+    const token = getAccessToken();
+
+    if (!token) {
+      throw new Error("Please login again.");
+    }
+
+    const orderId = getBackendOrderId(order);
+
+    if (!orderId) {
+      throw new Error("Backend order ID is missing.");
+    }
+
+    const response = await fetch(
+      `${API_URL}/payments/cod`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          order_id: orderId,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+          data?.error ||
+          "Unable to place COD order."
+      );
+    }
+
     const updatedOrder = {
       ...order,
+      backendOrderId: orderId,
       paymentMethod: "Cash on Delivery",
       paymentStatus: "COD",
-      paymentId: null,
+      paymentId: data?.data?.id || null,
       orderStatus: "Confirmed",
+      backendPayment: data,
     };
 
     localStorage.setItem(
@@ -94,69 +149,193 @@ function Payment() {
         cod: true,
       },
     });
-  };
+  } catch (err) {
+    console.error("COD payment failed:", err);
 
-  const handleOnlinePayment = async () => {
-    setError("");
-    setProcessing(true);
+    setError(
+      err.message ||
+        "Unable to place COD order."
+    );
+  } finally {
+    setProcessing(false);
+  }
+};
 
-    try {
-      const loaded = await loadRazorpay();
+const handleOnlinePayment = async () => {
+  setError("");
+  setProcessing(true);
 
-      if (!loaded) {
-        throw new Error(
-          "Razorpay Checkout could not be loaded. Please check your internet connection."
-        );
+  try {
+    const token = getAccessToken();
+
+    if (!token) {
+      throw new Error("Please login again.");
+    }
+
+    const orderId = getBackendOrderId(order);
+
+    if (!orderId) {
+      throw new Error("Backend order ID is missing.");
+    }
+
+    const loaded = await loadRazorpay();
+
+    if (!loaded) {
+      throw new Error(
+        "Razorpay Checkout could not be loaded."
+      );
+    }
+
+    // ----------------------------------
+    // CREATE RAZORPAY ORDER
+    // ----------------------------------
+
+    const createResponse = await fetch(
+      `${API_URL}/payments/create-order`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          order_id: orderId,
+        }),
       }
+    );
 
-      /*
-       * BACKEND INTEGRATION:
-       *
-       * Later Varshith will provide:
-       *
-       * POST /api/payments/create-order
-       *
-       * Response:
-       * {
-       *   order_id: "order_xxxxx",
-       *   amount: 50000,
-       *   currency: "INR"
-       * }
-       */
+    const createData =
+      await createResponse.json();
 
-      const backendOrder = {
-        id: `demo_order_${Date.now()}`,
-        amount: Math.round(Number(order.total || 0) * 100),
-        currency: "INR",
-      };
+    if (!createResponse.ok) {
+      throw new Error(
+        createData?.message ||
+          createData?.error ||
+          "Unable to create payment order."
+      );
+    }
 
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_demo",
+    const razorpayOrder =
+      createData?.data ||
+      createData?.payment ||
+      createData;
 
-        amount: backendOrder.amount,
+    const razorpayOrderId = razorpayOrder?.razorpay_order_id;
 
-        currency: backendOrder.currency,
+    const amount =
+      razorpayOrder?.amount ||
+      Math.round(
+        Number(order.total || 0) * 100
+      );
 
-        name: "Kirana Marketplace",
+    const currency =
+      razorpayOrder?.currency || "INR";
 
-        description: "Kirana Marketplace Order",
+    const key =
+      import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-        order_id:
-          import.meta.env.VITE_RAZORPAY_DEMO_ORDER_ID ||
-          backendOrder.id,
+    if (!key) {
+      throw new Error(
+        "Razorpay key is missing. Add VITE_RAZORPAY_KEY_ID to frontend .env."
+      );
+    }
 
-        handler: function (response) {
+    if (!razorpayOrderId) {
+      throw new Error(
+        "Razorpay order ID was not returned by the backend."
+      );
+    }
+
+    // ----------------------------------
+    // OPEN RAZORPAY
+    // ----------------------------------
+
+    const options = {
+      key,
+      amount,
+      currency,
+
+      name: "Kirana Marketplace",
+
+      description:
+        `Payment for Order #${orderId}`,
+
+      order_id: razorpayOrderId,
+
+      handler: async function (response) {
+        try {
+          // ----------------------------------
+          // VERIFY PAYMENT
+          // ----------------------------------
+
+          const verifyResponse =
+            await fetch(
+              `${API_URL}/payments/verify`,
+              {
+                method: "POST",
+
+                headers: {
+                  "Content-Type":
+                    "application/json",
+
+                  Authorization:
+                    `Bearer ${token}`,
+                },
+
+                body: JSON.stringify({
+                  order_id: orderId,
+
+                  razorpay_order_id:
+                    response.razorpay_order_id,
+
+                  razorpay_payment_id:
+                    response.razorpay_payment_id,
+
+                  razorpay_signature:
+                    response.razorpay_signature,
+                }),
+              }
+            );
+
+          const verifyData =
+            await verifyResponse.json();
+
+          if (!verifyResponse.ok) {
+            throw new Error(
+              verifyData?.message ||
+                verifyData?.error ||
+                "Payment verification failed."
+            );
+          }
+
           const updatedOrder = {
             ...order,
+
+            backendOrderId: orderId,
+
             paymentMethod:
               PAYMENT_METHODS.find(
-                (method) => method.id === selectedMethod
-              )?.name || selectedMethod,
+                (method) =>
+                  method.id ===
+                  selectedMethod
+              )?.name ||
+              selectedMethod,
+
             paymentStatus: "Paid",
-            paymentId: response.razorpay_payment_id,
-            razorpayOrderId: response.razorpay_order_id,
-            razorpaySignature: response.razorpay_signature,
+
+            paymentId:
+              response.razorpay_payment_id,
+
+            razorpayOrderId:
+              response.razorpay_order_id,
+
+            razorpaySignature:
+              response.razorpay_signature,
+
             orderStatus: "Confirmed",
+
+            backendPayment:
+              verifyData,
           };
 
           localStorage.setItem(
@@ -164,41 +343,85 @@ function Payment() {
             JSON.stringify(updatedOrder)
           );
 
-          navigate("/payment-success", {
-            state: {
-              order: updatedOrder,
-            },
-          });
+          setProcessing(false);
+
+          navigate(
+            "/payment-success",
+            {
+              state: {
+                order: updatedOrder,
+              },
+            }
+          );
+        } catch (err) {
+          console.error(
+            "Payment verification failed:",
+            err
+          );
+
+          setProcessing(false);
+
+          navigate(
+            "/payment-failure",
+            {
+              state: {
+                order,
+                error:
+                  err.message ||
+                  "Payment verification failed.",
+              },
+            }
+          );
+        }
+      },
+
+      modal: {
+        ondismiss: function () {
+          setProcessing(false);
+
+          setError(
+            "Payment was cancelled. You can retry the payment."
+          );
         },
+      },
 
-        modal: {
-          ondismiss: function () {
-            setProcessing(false);
-            setError(
-              "Payment was cancelled. You can retry the payment."
-            );
-          },
-        },
+      theme: {
+        color: "#16a34a",
+      },
+    };
 
-        theme: {
-          color: "#16a34a",
-        },
-      };
+    const razorpay =
+      new window.Razorpay(options);
 
-      const razorpay = new window.Razorpay(options);
+    razorpay.on(
+      "payment.failed",
+      function (response) {
+        console.error(
+          "Payment failed:",
+          response.error
+        );
 
-      razorpay.on("payment.failed", function (response) {
-        console.error("Payment failed:", response.error);
+        setProcessing(false);
 
         const failedOrder = {
           ...order,
+
+          backendOrderId: orderId,
+
           paymentMethod:
             PAYMENT_METHODS.find(
-              (method) => method.id === selectedMethod
-            )?.name || selectedMethod,
+              (method) =>
+                method.id ===
+                selectedMethod
+            )?.name ||
+            selectedMethod,
+
           paymentStatus: "Failed",
+
           paymentId: null,
+
           orderStatus: "Payment Failed",
+
           paymentError:
             response.error?.description ||
             "Payment failed. Please try again.",
@@ -209,44 +432,50 @@ function Payment() {
           JSON.stringify(failedOrder)
         );
 
-        setProcessing(false);
+        navigate(
+          "/payment-failure",
+          {
+            state: {
+              order: failedOrder,
 
-        navigate("/payment-failure", {
-          state: {
-            order: failedOrder,
-            error:
-              response.error?.description ||
-              "Payment failed. Please try again.",
-          },
-        });
-      });
+              error:
+                response.error?.description ||
+                "Payment failed. Please try again.",
+            },
+          }
+        );
+      }
+    );
 
-      razorpay.open();
-    } catch (err) {
-      console.error(err);
+    razorpay.open();
+  } catch (err) {
+    console.error(
+      "Unable to start payment:",
+      err
+    );
 
-      setProcessing(false);
+    setProcessing(false);
 
-      setError(
-        err.message ||
-          "Something went wrong while starting the payment."
-      );
-    }
-  };
+    setError(
+      err.message ||
+        "Something went wrong while starting the payment."
+    );
+  }
+};
 
-  const handlePayment = () => {
-    if (!order) {
-      setError("Order information is missing.");
-      return;
-    }
+const handlePayment = () => {
+  if (!order) {
+    setError("Order information is missing.");
+    return;
+  }
 
-    if (selectedMethod === "cod") {
-      handleCOD();
-      return;
-    }
+  if (selectedMethod === "cod") {
+    handleCOD();
+    return;
+  }
 
-    handleOnlinePayment();
-  };
+  handleOnlinePayment();
+};
 
   if (!order) {
     return (

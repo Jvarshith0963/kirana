@@ -32,6 +32,7 @@ function Login() {
   const { login } = useAuth();
 
   const [serverError, setServerError] = useState("");
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   /* =================================
      FORM
@@ -54,41 +55,60 @@ function Login() {
   });
 
   /* =================================
-     FRONTEND TEST LOGIN
+     ROLE-BASED REDIRECT
+     Shared by email/password and Google login
+  ================================= */
+
+  const redirectByRole = (role) => {
+    if (role === "admin") {
+      navigate("/admin");
+    } else if (role === "vendor") {
+      navigate("/vendor");
+    } else {
+      navigate("/");
+    }
+  };
+
+  /* =================================
+     EMAIL/PASSWORD LOGIN
   ================================= */
 
   const onSubmit = async (data) => {
     setServerError("");
 
     try {
-      /*
-        Temporary frontend-only login.
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: data.email,
+            password: data.password,
+          }),
+        }
+      );
 
-        This allows Hasini to develop and test
-        the frontend without running Varshith's backend.
+      const result = await response.json();
 
-        Later Varshith can replace this with
-        the real backend API.
-      */
+      if (!response.ok) {
+        throw new Error(result.message || "Login failed");
+      }
 
-      const testUser = {
-        id: 1,
-        name: "Test Customer",
-        email: data.email,
-        phone: "9876543210",
-        role: "customer",
-      };
+      login(
+        result.user,
+        result.accessToken,
+        result.refreshToken
+      );
 
-      const testToken = "frontend-test-jwt-token";
-
-      login(testUser, testToken);
-
-      navigate("/");
+      redirectByRole(result.user.role);
     } catch (error) {
       console.error("Login error:", error);
 
       setServerError(
-        "Login failed. Please try again."
+        error.message || "Login failed. Please try again."
       );
     }
   };
@@ -98,26 +118,98 @@ function Login() {
   ================================= */
 
   const handleGoogleLogin = async (credentialResponse) => {
-    /*
-      Google backend integration will be done later
-      by connecting this to Varshith's API.
-    */
+    setServerError("");
 
-    console.log(
-      "Google credential received:",
-      credentialResponse
-    );
+    const idToken = credentialResponse?.credential;
 
-    setServerError(
-      "Google login will be connected to the backend."
-    );
+    if (!idToken) {
+      console.error(
+        "Google login did not return an ID token:",
+        credentialResponse
+      );
+
+      setServerError(
+        "Google login failed because no Google credential was received."
+      );
+
+      return;
+    }
+
+    setGoogleLoading(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/auth/google`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            idToken,
+          }),
+        }
+      );
+
+      let result = null;
+
+      try {
+        result = await response.json();
+      } catch (error) {
+        console.error(
+          "Unable to parse Google login response:",
+          error
+        );
+
+        throw new Error(
+          "Invalid response received from the server.",
+          { cause: error }
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+            "Google login failed. Please try again."
+        );
+      }
+
+      if (
+        !result?.user ||
+        !result?.accessToken
+      ) {
+        console.error(
+          "Invalid Google login response:",
+          result
+        );
+
+        throw new Error(
+          "Google login response is missing authentication information."
+        );
+      }
+
+      login(
+        result.user,
+        result.accessToken,
+        result.refreshToken
+      );
+
+      redirectByRole(result.user.role);
+    } catch (error) {
+      console.error("Google login error:", error);
+
+      setServerError(
+        error.message ||
+          "Google login failed. Please try again."
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-green-50 px-4 py-10">
-
       <div className="mx-auto max-w-md">
-
         <div className="rounded-2xl bg-white p-8 shadow-lg">
 
           {/* =================================
@@ -125,7 +217,6 @@ function Login() {
           ================================= */}
 
           <div className="mb-8 text-center">
-
             <div className="mb-3 text-5xl">
               🛒
             </div>
@@ -137,7 +228,6 @@ function Login() {
             <p className="mt-2 text-gray-500">
               Login to your Kirana Marketplace account
             </p>
-
           </div>
 
           {/* =================================
@@ -158,11 +248,9 @@ function Login() {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-5"
           >
-
             {/* Email */}
 
             <div>
-
               <label
                 htmlFor="email"
                 className="mb-2 block font-medium text-gray-700"
@@ -187,13 +275,11 @@ function Login() {
                   {errors.email.message}
                 </p>
               )}
-
             </div>
 
             {/* Password */}
 
             <div>
-
               <label
                 htmlFor="password"
                 className="mb-2 block font-medium text-gray-700"
@@ -218,34 +304,30 @@ function Login() {
                   {errors.password.message}
                 </p>
               )}
-
             </div>
 
             {/* Forgot Password */}
 
             <div className="text-right">
-
               <Link
                 to="/forgot-password"
                 className="text-sm font-medium text-green-700 hover:text-green-900"
               >
                 Forgot Password?
               </Link>
-
             </div>
 
             {/* Login Button */}
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || googleLoading}
               className="w-full rounded-lg bg-green-600 py-3 font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting
                 ? "Logging in..."
                 : "Login"}
             </button>
-
           </form>
 
           {/* =================================
@@ -253,15 +335,13 @@ function Login() {
           ================================= */}
 
           <div className="my-7 flex items-center gap-3">
-
-            <div className="h-px flex-1 bg-gray-200"></div>
+            <div className="h-px flex-1 bg-gray-200" />
 
             <span className="text-sm text-gray-400">
               OR
             </span>
 
-            <div className="h-px flex-1 bg-gray-200"></div>
-
+            <div className="h-px flex-1 bg-gray-200" />
           </div>
 
           {/* =================================
@@ -271,7 +351,8 @@ function Login() {
           <button
             type="button"
             onClick={() => navigate("/otp-login")}
-            className="w-full rounded-lg border border-green-600 py-3 font-semibold text-green-700 transition hover:bg-green-50"
+            disabled={googleLoading}
+            className="w-full rounded-lg border border-green-600 py-3 font-semibold text-green-700 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             📱 Login with OTP
           </button>
@@ -281,18 +362,24 @@ function Login() {
           ================================= */}
 
           <div className="mt-3 flex justify-center">
+            {googleLoading ? (
+              <div className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-600">
+                Signing in with Google...
+              </div>
+            ) : (
+              <GoogleLogin
+                onSuccess={handleGoogleLogin}
+                onError={() => {
+                  console.error(
+                    "Google Login Failed"
+                  );
 
-            <GoogleLogin
-              onSuccess={handleGoogleLogin}
-              onError={() => {
-                console.error("Google Login Failed");
-
-                setServerError(
-                  "Google login failed. Please try again."
-                );
-              }}
-            />
-
+                  setServerError(
+                    "Google login failed. Please try again."
+                  );
+                }}
+              />
+            )}
           </div>
 
           {/* =================================
@@ -300,7 +387,6 @@ function Login() {
           ================================= */}
 
           <p className="mt-7 text-center text-gray-600">
-
             Don't have an account?{" "}
 
             <Link
@@ -309,7 +395,6 @@ function Login() {
             >
               Create Account
             </Link>
-
           </p>
 
           {/* =================================
@@ -317,20 +402,16 @@ function Login() {
           ================================= */}
 
           <div className="mt-5 border-t pt-5 text-center">
-
             <Link
               to="/vendor/login"
               className="text-sm font-medium text-gray-600 hover:text-green-700"
             >
               🏪 Are you a vendor? Login here →
             </Link>
-
           </div>
 
         </div>
-
       </div>
-
     </div>
   );
 }

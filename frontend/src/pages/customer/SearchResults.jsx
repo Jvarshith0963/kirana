@@ -1,121 +1,98 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import ProductCard from "../../components/ProductCard";
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 function SearchResults() {
   const [searchParams] = useSearchParams();
 
   const query = searchParams.get("q") || "";
 
-  // Temporary frontend data.
-  // Later this will come from Varshith's search API.
-  const products = [
-    {
-      id: 1,
-      name: "Aashirvaad Atta",
-      price: 250,
-      category: "Groceries",
-      brand: "Aashirvaad",
-      rating: 4.5,
-      image:
-        "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 2,
-      name: "India Gate Rice",
-      price: 180,
-      category: "Groceries",
-      brand: "India Gate",
-      rating: 4.6,
-      image:
-        "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 3,
-      name: "Tata Salt",
-      price: 30,
-      category: "Groceries",
-      brand: "Tata",
-      rating: 4.4,
-      image:
-        "https://images.unsplash.com/photo-1518110925495-5c3b0f7a4f2b?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 4,
-      name: "Parle-G Biscuits",
-      price: 40,
-      category: "Snacks",
-      brand: "Parle",
-      rating: 4.3,
-      image:
-        "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 5,
-      name: "Tata Tea",
-      price: 150,
-      category: "Beverages",
-      brand: "Tata",
-      rating: 4.5,
-      image:
-        "https://images.unsplash.com/photo-1594631252845-29fc4cc8cde9?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 6,
-      name: "Surf Excel",
-      price: 120,
-      category: "Household",
-      brand: "Surf Excel",
-      rating: 4.2,
-      image:
-        "https://images.unsplash.com/photo-1585832770485-e68a5dbfad52?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 7,
-      name: "Maggi Noodles",
-      price: 60,
-      category: "Snacks",
-      brand: "Nestle",
-      rating: 4.7,
-      image:
-        "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 8,
-      name: "Red Label Tea",
-      price: 220,
-      category: "Beverages",
-      brand: "Red Label",
-      rating: 4.4,
-      image:
-        "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 9,
-      name: "Vim Dishwash",
-      price: 95,
-      category: "Household",
-      brand: "Vim",
-      rating: 4.1,
-      image:
-        "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=600&q=80",
-    },
-  ];
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const results = useMemo(() => {
-    const searchText = query.trim().toLowerCase();
+  /* =================================
+     FETCH SEARCH RESULTS FROM API
+  ================================= */
 
-    if (!searchText) {
-      return [];
-    }
+  useEffect(() => {
+    const fetchSearchResults = async () => {
+      const searchText = query.trim();
 
-    return products.filter((product) => {
-      return (
-        product.name.toLowerCase().includes(searchText) ||
-        product.brand.toLowerCase().includes(searchText) ||
-        product.category.toLowerCase().includes(searchText)
-      );
-    });
+      if (!searchText) {
+        setProducts([]);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await fetch(
+          `${API_URL}/products?search=${encodeURIComponent(
+            searchText
+          )}`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch search results");
+        }
+
+        const result = await response.json();
+
+        const apiProducts = result.data || [];
+
+        const formattedProducts = apiProducts.map(
+          (product) => ({
+            id: product.id,
+            name: product.name,
+            price: Number(product.price) || 0,
+            category:
+              product.category_name || "Other",
+            brand:
+              product.brand_name || "Other",
+            rating:
+              Number(product.rating) || 0,
+            reviews:
+              Number(product.reviews) || 0,
+            image:
+              product.image_url || "",
+            description:
+              product.description || "",
+            stock:
+              Number(product.stock_quantity) || 0,
+            unit:
+              product.unit || "piece",
+            store_id:
+              product.store_id,
+            is_available:
+              product.is_available,
+            sku:
+              product.sku,
+          })
+        );
+
+        setProducts(formattedProducts);
+      } catch (err) {
+        console.error(
+          "Error fetching search results:",
+          err
+        );
+
+        setError(
+          "Unable to load search results. Please try again."
+        );
+
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSearchResults();
   }, [query]);
 
   return (
@@ -123,7 +100,9 @@ function SearchResults() {
 
       <div className="mx-auto max-w-7xl">
 
-        {/* Header */}
+        {/* =================================
+            HEADER
+        ================================= */}
 
         <div className="mb-8">
 
@@ -144,13 +123,13 @@ function SearchResults() {
               : "Search Products"}
           </h1>
 
-          {query && (
+          {query && !loading && !error && (
             <p className="mt-2 text-gray-600">
               Found{" "}
               <span className="font-bold text-gray-800">
-                {results.length}
+                {products.length}
               </span>{" "}
-              {results.length === 1
+              {products.length === 1
                 ? "product"
                 : "products"}
             </p>
@@ -158,13 +137,42 @@ function SearchResults() {
 
         </div>
 
-        {/* Results */}
+        {/* =================================
+            ERROR
+        ================================= */}
 
-        {results.length > 0 ? (
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-center font-semibold text-red-600">
+            {error}
+          </div>
+        )}
+
+        {/* =================================
+            LOADING
+        ================================= */}
+
+        {loading ? (
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 
-            {results.map((product) => (
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="h-80 animate-pulse rounded-2xl bg-white shadow-sm"
+              />
+            ))}
+
+          </div>
+
+        ) : products.length > 0 ? (
+
+          /* =================================
+             SEARCH RESULTS
+          ================================= */
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+
+            {products.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
@@ -175,7 +183,9 @@ function SearchResults() {
 
         ) : (
 
-          /* Empty State */
+          /* =================================
+             EMPTY STATE
+          ================================= */
 
           <div className="rounded-3xl bg-white px-6 py-16 text-center shadow-sm">
 

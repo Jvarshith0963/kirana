@@ -11,11 +11,21 @@ function ProductCard({ product }) {
   } = useCart();
 
   const [imageError, setImageError] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [cartMessage, setCartMessage] = useState("");
 
-  // Check if product is already in wishlist
-  const isWishlisted = wishlistItems.some(
-    (item) => String(item.id) === String(product.id)
+  // Wishlist entry for this product, if one exists
+  const wishlistEntry = (wishlistItems || []).find(
+    (item) => String(item.productId ?? item.id) === String(product.id)
   );
+
+  const isWishlisted = Boolean(wishlistEntry);
+
+  const outOfStock =
+    product.is_available === false ||
+    (product.stock_quantity !== undefined &&
+      Number(product.stock_quantity) <= 0);
 
   // ==========================================
   // WISHLIST
@@ -25,33 +35,47 @@ function ProductCard({ product }) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (isWishlisted) {
-      removeFromWishlist(product.id);
+    if (wishlistEntry) {
+      removeFromWishlist(wishlistEntry.id);
     } else {
       addToWishlist(product);
     }
   };
 
   // ==========================================
-  // ADD TO CART
+  // ADD TO CART (shows success / error on the card)
   // ==========================================
 
-  const handleAddToCart = (e) => {
+  const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    addToCart(product);
+    if (adding || outOfStock) return;
+
+    setAdding(true);
+    setCartMessage("");
+
+    try {
+      const result = await addToCart(product);
+
+      if (result?.ok === false) {
+        setCartMessage(result.message || "Could not add to cart.");
+      } else {
+        setAdded(true);
+        setTimeout(() => setAdded(false), 1500);
+      }
+    } catch (error) {
+      console.error("Add to cart error:", error);
+      setCartMessage(error?.message || "Could not add to cart.");
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
     <div className="group relative overflow-hidden rounded-2xl bg-white shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
-
-      {/* ==========================================
-          PRODUCT IMAGE
-      ========================================== */}
-
+      {/* PRODUCT IMAGE */}
       <div className="relative flex h-52 items-center justify-center bg-green-50">
-
         {!imageError && product.image ? (
           <img
             src={product.image}
@@ -60,15 +84,10 @@ function ProductCard({ product }) {
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="text-6xl">
-            {product.icon || "🛒"}
-          </div>
+          <div className="text-6xl">{product.icon || "🛒"}</div>
         )}
 
-        {/* ==========================================
-            WISHLIST BUTTON
-        ========================================== */}
-
+        {/* WISHLIST BUTTON */}
         <button
           type="button"
           onClick={handleWishlist}
@@ -82,39 +101,27 @@ function ProductCard({ product }) {
         </button>
       </div>
 
-      {/* ==========================================
-          PRODUCT DETAILS
-      ========================================== */}
-
+      {/* PRODUCT DETAILS */}
       <div className="p-5">
-
-        {/* Category */}
         {product.category && (
           <p className="mb-1 text-sm font-medium text-green-600">
             {product.category}
           </p>
         )}
 
-        {/* Product Name */}
         <Link to={`/products/${product.id}`}>
           <h2 className="min-h-[56px] text-lg font-bold text-gray-800 transition hover:text-green-600">
             {product.name}
           </h2>
         </Link>
 
-        {/* Brand */}
         {product.brand && (
-          <p className="mt-1 text-sm text-gray-500">
-            {product.brand}
-          </p>
+          <p className="mt-1 text-sm text-gray-500">{product.brand}</p>
         )}
 
-        {/* Rating */}
-        {product.rating && (
+        {product.rating > 0 && (
           <div className="mt-2 flex items-center gap-1">
-            <span className="text-yellow-500">
-              ⭐
-            </span>
+            <span className="text-yellow-500">⭐</span>
 
             <span className="text-sm font-medium text-gray-700">
               {product.rating}
@@ -122,25 +129,29 @@ function ProductCard({ product }) {
           </div>
         )}
 
-        {/* ==========================================
-            PRICE + CART
-        ========================================== */}
-
+        {/* PRICE + CART */}
         <div className="mt-4 flex items-center justify-between gap-3">
-
-          <p className="text-xl font-bold text-green-700">
-            ₹{product.price}
-          </p>
+          <p className="text-xl font-bold text-green-700">₹{product.price}</p>
 
           <button
             type="button"
             onClick={handleAddToCart}
-            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+            disabled={adding || outOfStock}
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
-            Add to Cart
+            {outOfStock
+              ? "Out of Stock"
+              : adding
+              ? "Adding..."
+              : added
+              ? "✓ Added"
+              : "Add to Cart"}
           </button>
-
         </div>
+
+        {cartMessage && (
+          <p className="mt-2 text-xs text-red-500">{cartMessage}</p>
+        )}
       </div>
     </div>
   );

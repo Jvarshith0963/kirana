@@ -5,9 +5,22 @@ import "./index.css";
 import { AuthProvider } from "./context/AuthContext";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+const googleClientId =
+  import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+if (!googleClientId) {
+  console.error(
+    "VITE_GOOGLE_CLIENT_ID is not configured."
+  );
+}
+
+ReactDOM.createRoot(
+  document.getElementById("root")
+).render(
   <React.StrictMode>
-    <GoogleOAuthProvider clientId="323894539196-nb01m7d0ftvhddcvunjc46hu12hrr5vi.apps.googleusercontent.com">
+    <GoogleOAuthProvider
+      clientId={googleClientId}
+    >
       <AuthProvider>
         <App />
       </AuthProvider>

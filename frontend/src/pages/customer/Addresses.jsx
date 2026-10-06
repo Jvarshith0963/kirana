@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const ADDRESS_META_KEY = "kirana_address_meta";
+
 const emptyForm = {
   id: null,
   type: "Home",
   name: "",
   phone: "",
   addressLine: "",
+  addressLine2: "",
+  landmark: "",
   city: "",
   state: "",
   pincode: "",
@@ -14,34 +21,324 @@ const emptyForm = {
   isDefault: false,
 };
 
+const getAccessToken = () => {
+  const directKeys = [
+    "accessToken",
+    "access_token",
+    "authToken",
+    "token",
+    "kirana_access_token",
+  ];
+
+  for (const key of directKeys) {
+    const value = localStorage.getItem(key);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  const objectKeys = [
+    "user",
+    "auth",
+    "currentUser",
+    "kirana_user",
+  ];
+
+  for (const key of objectKeys) {
+    try {
+      const value = JSON.parse(
+        localStorage.getItem(key) || "null"
+      );
+
+      const token =
+        value?.accessToken ||
+        value?.access_token ||
+        value?.token;
+
+      if (token) {
+        return token;
+      }
+    } catch {
+      // Ignore invalid JSON in localStorage.
+    }
+  }
+
+  return null;
+};
+
+const getStoredMetadata = () => {
+  try {
+    const saved = localStorage.getItem(
+      ADDRESS_META_KEY
+    );
+
+    if (!saved) {
+      return {};
+    }
+
+    const parsed = JSON.parse(saved);
+
+    return parsed && typeof parsed === "object"
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveStoredMetadata = (metadata) => {
+  localStorage.setItem(
+    ADDRESS_META_KEY,
+    JSON.stringify(metadata)
+  );
+};
+
+const getLegacyMetadata = () => {
+  try {
+    const saved = localStorage.getItem(
+      "kirana_addresses"
+    );
+
+    if (!saved) {
+      return {};
+    }
+
+    const parsed = JSON.parse(saved);
+
+    if (!Array.isArray(parsed)) {
+      return {};
+    }
+
+    return parsed.reduce((result, address) => {
+      if (address?.id != null) {
+        result[String(address.id)] = {
+          type: address.type || "Home",
+          name: address.name || "",
+          phone: address.phone || "",
+          latitude: address.latitude || "",
+          longitude: address.longitude || "",
+          addressLine2:
+            address.addressLine2 || "",
+          landmark: address.landmark || "",
+        };
+      }
+
+      return result;
+    }, {});
+  } catch {
+    return {};
+  }
+};
+
+const extractAddressList = (payload) => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.data?.addresses)) {
+    return payload.data.addresses;
+  }
+
+  if (Array.isArray(payload?.addresses)) {
+    return payload.addresses;
+  }
+
+  return [];
+};
+
+const extractSingleAddress = (payload) => {
+  if (payload?.id != null) {
+    return payload;
+  }
+
+  if (payload?.data?.id != null) {
+    return payload.data;
+  }
+
+  if (payload?.address?.id != null) {
+    return payload.address;
+  }
+
+  if (payload?.data?.address?.id != null) {
+    return payload.data.address;
+  }
+
+  return null;
+};
+
+const getErrorMessage = async (response) => {
+  try {
+    const payload = await response.json();
+
+    return (
+      payload?.message ||
+      payload?.error ||
+      payload?.errors?.[0]?.message ||
+      "Something went wrong. Please try again."
+    );
+  } catch {
+    return "Something went wrong. Please try again.";
+  }
+};
+
+const apiRequest = async (
+  path,
+  options = {}
+) => {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error(
+      "Please login to manage your addresses."
+    );
+  }
+
+  const response = await fetch(
+    `${API_URL}${path}`,
+    {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options.headers || {}),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(response)
+    );
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+
 function Addresses() {
   const [addresses, setAddresses] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const loadAddresses = async () => {
+    setLoading(true);
+
+    try {
+      const payload = await apiRequest(
+        "/addresses"
+      );
+
+      const backendAddresses =
+        extractAddressList(payload);
+
+      const metadata = {
+        ...getLegacyMetadata(),
+        ...getStoredMetadata(),
+      };
+
+      const mappedAddresses =
+        backendAddresses.map((address) => {
+          const meta =
+            metadata[String(address.id)] || {};
+
+          return {
+            id: address.id,
+
+            type:
+              meta.type || "Home",
+
+            name:
+              meta.name || "",
+
+            phone:
+              meta.phone || "",
+
+            addressLine:
+              address.address_line1 || "",
+
+            addressLine2:
+              address.address_line2 || "",
+
+            landmark:
+              address.landmark || "",
+
+            city:
+              address.city || "",
+
+            state:
+              address.state || "",
+
+            pincode:
+              address.pincode || "",
+
+            latitude:
+              meta.latitude || "",
+
+            longitude:
+              meta.longitude || "",
+
+            isDefault:
+              Boolean(address.is_default),
+          };
+        });
+
+      setAddresses(mappedAddresses);
+      setError("");
+
+      return mappedAddresses;
+    } catch (err) {
+      console.error(
+        "Unable to load addresses:",
+        err
+      );
+
+      setAddresses([]);
+
+      setError(
+        err.message ||
+          "Unable to load your saved addresses."
+      );
+
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const saved = localStorage.getItem("kirana_addresses");
-
-    if (saved) {
-      setAddresses(JSON.parse(saved));
-    }
+    loadAddresses();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(
-      "kirana_addresses",
-      JSON.stringify(addresses)
-    );
-  }, [addresses]);
-
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const {
+      name,
+      value,
+      type,
+      checked,
+    } = e.target;
 
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : value,
     }));
   };
 
@@ -49,7 +346,10 @@ function Addresses() {
     setError("");
 
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser.");
+      setError(
+        "Geolocation is not supported by your browser."
+      );
+
       return;
     }
 
@@ -57,8 +357,16 @@ function Addresses() {
       (position) => {
         setForm((prev) => ({
           ...prev,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
+
+          latitude:
+            position.coords.latitude.toFixed(
+              6
+            ),
+
+          longitude:
+            position.coords.longitude.toFixed(
+              6
+            ),
         }));
       },
       () => {
@@ -97,10 +405,11 @@ function Addresses() {
     return "";
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const validationError = validateForm();
+    const validationError =
+      validateForm();
 
     if (validationError) {
       setError(validationError);
@@ -108,80 +417,248 @@ function Addresses() {
     }
 
     setError("");
+    setSaving(true);
 
-    if (editingId) {
-      setAddresses((prev) =>
-        prev.map((address) =>
-          address.id === editingId
-            ? {
-                ...form,
-                id: editingId,
-                isDefault:
-                  form.isDefault ||
-                  prev.filter((item) => item.id !== editingId)
-                    .every((item) => !item.isDefault),
-              }
-            : form.isDefault
-            ? { ...address, isDefault: false }
-            : address
-        )
-      );
-    } else {
-      const newAddress = {
-        ...form,
-        id: Date.now(),
-        isDefault:
-          addresses.length === 0 || form.isDefault,
+    try {
+      const otherAddresses =
+        addresses.filter(
+          (address) =>
+            address.id !== editingId
+        );
+
+      const hasOtherDefault =
+        otherAddresses.some(
+          (address) =>
+            address.isDefault
+        );
+
+      const isDefault = editingId
+        ? form.isDefault ||
+          !hasOtherDefault
+        : addresses.length === 0 ||
+          form.isDefault;
+
+      const payload = {
+        address_line1:
+          form.addressLine.trim(),
+
+        address_line2:
+          form.addressLine2?.trim() ||
+          null,
+
+        city:
+          form.city.trim(),
+
+        state:
+          form.state.trim(),
+
+        pincode:
+          form.pincode.trim(),
+
+        landmark:
+          form.landmark?.trim() ||
+          null,
+
+        is_default:
+          isDefault,
       };
 
-      setAddresses((prev) =>
-        newAddress.isDefault
-          ? [
-              ...prev.map((item) => ({
-                ...item,
-                isDefault: false,
-              })),
-              newAddress,
-            ]
-          : [...prev, newAddress]
-      );
-    }
+      let response;
 
-    setForm(emptyForm);
-    setEditingId(null);
-    setShowForm(false);
+      if (editingId) {
+        response = await apiRequest(
+          `/addresses/${editingId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        response = await apiRequest(
+          "/addresses",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          }
+        );
+      }
+
+      const backendAddress =
+        extractSingleAddress(response);
+
+      const refreshedAddresses =
+        await loadAddresses();
+
+      const savedAddressId =
+        backendAddress?.id ??
+        editingId ??
+        refreshedAddresses.find(
+          (address) =>
+            address.addressLine ===
+              payload.address_line1 &&
+            address.city ===
+              payload.city &&
+            address.pincode ===
+              payload.pincode
+        )?.id;
+
+      if (savedAddressId != null) {
+        const metadata =
+          getStoredMetadata();
+
+        metadata[
+          String(savedAddressId)
+        ] = {
+          ...(metadata[
+            String(savedAddressId)
+          ] || {}),
+
+          type: form.type,
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          latitude: form.latitude,
+          longitude: form.longitude,
+          addressLine2:
+            form.addressLine2?.trim() ||
+            "",
+          landmark:
+            form.landmark?.trim() ||
+            "",
+        };
+
+        saveStoredMetadata(metadata);
+      }
+
+      await loadAddresses();
+
+      setForm(emptyForm);
+      setEditingId(null);
+      setShowForm(false);
+    } catch (err) {
+      console.error(
+        "Unable to save address:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Unable to save the address."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEdit = (address) => {
-    setForm(address);
+    setForm({
+      ...emptyForm,
+      ...address,
+    });
+
     setEditingId(address.id);
     setShowForm(true);
     setError("");
   };
 
-  const handleDelete = (id) => {
-    const addressToDelete = addresses.find(
-      (address) => address.id === id
-    );
+  const handleDelete = async (id) => {
+    const addressToDelete =
+      addresses.find(
+        (address) =>
+          address.id === id
+      );
 
-    const remaining = addresses.filter(
-      (address) => address.id !== id
-    );
-
-    if (addressToDelete?.isDefault && remaining.length > 0) {
-      remaining[0].isDefault = true;
+    if (!addressToDelete) {
+      return;
     }
 
-    setAddresses(remaining);
+    const wasDefault =
+      addressToDelete.isDefault;
+
+    setError("");
+
+    try {
+      await apiRequest(
+        `/addresses/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const refreshedAddresses =
+        await loadAddresses();
+
+      if (
+        wasDefault &&
+        refreshedAddresses.length > 0 &&
+        !refreshedAddresses.some(
+          (address) =>
+            address.isDefault
+        )
+      ) {
+        await apiRequest(
+          `/addresses/${refreshedAddresses[0].id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              is_default: true,
+            }),
+          }
+        );
+
+        await loadAddresses();
+      }
+
+      const metadata =
+        getStoredMetadata();
+
+      delete metadata[String(id)];
+
+      saveStoredMetadata(metadata);
+
+      if (editingId === id) {
+        setForm(emptyForm);
+        setEditingId(null);
+        setShowForm(false);
+      }
+    } catch (err) {
+      console.error(
+        "Unable to delete address:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Unable to delete the address."
+      );
+    }
   };
 
-  const handleSetDefault = (id) => {
-    setAddresses((prev) =>
-      prev.map((address) => ({
-        ...address,
-        isDefault: address.id === id,
-      }))
-    );
+  const handleSetDefault = async (id) => {
+    setError("");
+
+    try {
+      await apiRequest(
+        `/addresses/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_default: true,
+          }),
+        }
+      );
+
+      await loadAddresses();
+    } catch (err) {
+      console.error(
+        "Unable to set default address:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Unable to set the default address."
+      );
+    }
   };
 
   const handleCancel = () => {
@@ -219,11 +696,20 @@ function Addresses() {
           </button>
         </div>
 
+        {/* Error */}
+        {error && !showForm && (
+          <div className="mb-6 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
         {/* Add/Edit Form */}
         {showForm && (
           <div className="mb-8 rounded-2xl bg-white p-6 shadow-md">
             <h2 className="mb-5 text-xl font-bold text-gray-800">
-              {editingId ? "Edit Address" : "Add New Address"}
+              {editingId
+                ? "Edit Address"
+                : "Add New Address"}
             </h2>
 
             {error && (
@@ -246,13 +732,21 @@ function Addresses() {
                     onChange={handleChange}
                     className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-green-500"
                   >
-                    <option value="Home">Home</option>
-                    <option value="Work">Work</option>
-                    <option value="Other">Other</option>
+                    <option value="Home">
+                      Home
+                    </option>
+
+                    <option value="Work">
+                      Work
+                    </option>
+
+                    <option value="Other">
+                      Other
+                    </option>
                   </select>
                 </div>
 
-                {/* Name */}
+                {/* Receiver Name */}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Receiver Name
@@ -314,6 +808,40 @@ function Addresses() {
                     onChange={handleChange}
                     rows="3"
                     placeholder="House no, street, landmark..."
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-green-500"
+                  />
+                </div>
+
+                {/* Address Line 2 */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Address Line 2
+                  </label>
+
+                  <input
+                    type="text"
+                    name="addressLine2"
+                    value={
+                      form.addressLine2
+                    }
+                    onChange={handleChange}
+                    placeholder="Apartment, floor, etc."
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-green-500"
+                  />
+                </div>
+
+                {/* Landmark */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Landmark
+                  </label>
+
+                  <input
+                    type="text"
+                    name="landmark"
+                    value={form.landmark}
+                    onChange={handleChange}
+                    placeholder="Nearby landmark"
                     className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-green-500"
                   />
                 </div>
@@ -383,7 +911,7 @@ function Addresses() {
                 </div>
               </div>
 
-              {/* Location Button */}
+              {/* Location */}
               <button
                 type="button"
                 onClick={handleUseLocation}
@@ -411,15 +939,21 @@ function Addresses() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   type="submit"
-                  className="rounded-lg bg-green-600 px-6 py-3 font-semibold text-white hover:bg-green-700"
+                  disabled={saving}
+                  className="rounded-lg bg-green-600 px-6 py-3 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {editingId ? "Update Address" : "Save Address"}
+                  {saving
+                    ? "Saving..."
+                    : editingId
+                    ? "Update Address"
+                    : "Save Address"}
                 </button>
 
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="rounded-lg border border-gray-300 px-6 py-3 font-semibold text-gray-700 hover:bg-gray-50"
+                  disabled={saving}
+                  className="rounded-lg border border-gray-300 px-6 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>
@@ -429,9 +963,25 @@ function Addresses() {
         )}
 
         {/* Address List */}
-        {addresses.length === 0 ? (
+        {loading ? (
           <div className="rounded-2xl bg-white p-12 text-center shadow-md">
-            <div className="mb-4 text-5xl">📍</div>
+            <div className="mb-4 text-4xl">
+              ⏳
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-800">
+              Loading addresses...
+            </h2>
+
+            <p className="mt-2 text-gray-500">
+              Please wait while we load your saved addresses.
+            </p>
+          </div>
+        ) : addresses.length === 0 ? (
+          <div className="rounded-2xl bg-white p-12 text-center shadow-md">
+            <div className="mb-4 text-5xl">
+              📍
+            </div>
 
             <h2 className="text-xl font-bold text-gray-800">
               No addresses saved
@@ -451,9 +1001,11 @@ function Addresses() {
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">
-                      {address.type === "Home"
+                      {address.type ===
+                      "Home"
                         ? "🏠"
-                        : address.type === "Work"
+                        : address.type ===
+                          "Work"
                         ? "🏢"
                         : "📍"}
                     </span>
@@ -477,33 +1029,64 @@ function Addresses() {
                     {address.name}
                   </p>
 
-                  <p>📞 {address.phone}</p>
-
-                  <p>{address.addressLine}</p>
+                  <p>
+                    📞 {address.phone}
+                  </p>
 
                   <p>
-                    {address.city}, {address.state} -{" "}
+                    {address.addressLine}
+                  </p>
+
+                  {address.addressLine2 && (
+                    <p>
+                      {address.addressLine2}
+                    </p>
+                  )}
+
+                  {address.landmark && (
+                    <p>
+                      Landmark:{" "}
+                      {address.landmark}
+                    </p>
+                  )}
+
+                  <p>
+                    {address.city},{" "}
+                    {address.state} -{" "}
                     {address.pincode}
                   </p>
 
-                  {(address.latitude || address.longitude) && (
+                  {(address.latitude ||
+                    address.longitude) && (
                     <p className="text-xs text-gray-500">
-                      📍 {address.latitude || "—"},{" "}
-                      {address.longitude || "—"}
+                      📍{" "}
+                      {address.latitude ||
+                        "—"}
+                      ,{" "}
+                      {address.longitude ||
+                        "—"}
                     </p>
                   )}
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
                   <button
-                    onClick={() => handleEdit(address)}
+                    type="button"
+                    onClick={() =>
+                      handleEdit(address)
+                    }
                     className="rounded-lg border border-green-600 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
                   >
                     Edit
                   </button>
 
                   <button
-                    onClick={() => handleDelete(address.id)}
+                    type="button"
+                    onClick={() =>
+                      handleDelete(
+                        address.id
+                      )
+                    }
                     className="rounded-lg border border-red-500 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
                   >
                     Delete
@@ -511,7 +1094,12 @@ function Addresses() {
 
                   {!address.isDefault && (
                     <button
-                      onClick={() => handleSetDefault(address.id)}
+                      type="button"
+                      onClick={() =>
+                        handleSetDefault(
+                          address.id
+                        )
+                      }
                       className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
                     >
                       Set as Default
