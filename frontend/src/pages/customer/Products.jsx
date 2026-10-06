@@ -1,100 +1,138 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../../components/ProductCard";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
 function Products() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  /* =================================
+     TEMPORARY FRONTEND PRODUCT DATA
+     Later this will come from API
+  ================================= */
+
+  const products = [
+    {
+      id: 1,
+      name: "Aashirvaad Atta",
+      price: 250,
+      category: "Groceries",
+      brand: "Aashirvaad",
+      rating: 4.5,
+      image:
+        "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 2,
+      name: "India Gate Rice",
+      price: 180,
+      category: "Groceries",
+      brand: "India Gate",
+      rating: 4.6,
+      image:
+        "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 3,
+      name: "Tata Salt",
+      price: 30,
+      category: "Groceries",
+      brand: "Tata",
+      rating: 4.4,
+      image:
+        "https://tse2.mm.bing.net/th/id/OIP.Wjn_Ji9XWSNM-SWKKhPn8AHaHa?r=0&rs=1&pid=ImgDetMain&o=7&rm=3",
+    },
+    {
+      id: 4,
+      name: "Parle-G Biscuits",
+      price: 40,
+      category: "Snacks",
+      brand: "Parle",
+      rating: 4.3,
+      image:
+        "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 5,
+      name: "Tata Tea",
+      price: 150,
+      category: "Beverages",
+      brand: "Tata",
+      rating: 4.5,
+      image:
+        "https://images.unsplash.com/photo-1594631252845-29fc4cc8cde9?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 6,
+      name: "Surf Excel",
+      price: 120,
+      category: "Household",
+      brand: "Surf Excel",
+      rating: 4.2,
+      image:
+        "https://images.unsplash.com/photo-1585832770485-e68a5dbfad52?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 7,
+      name: "Maggi Noodles",
+      price: 60,
+      category: "Snacks",
+      brand: "Nestle",
+      rating: 4.7,
+      image:
+        "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 8,
+      name: "Red Label Tea",
+      price: 220,
+      category: "Beverages",
+      brand: "Red Label",
+      rating: 4.4,
+      image:
+        "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: 9,
+      name: "Vim Dishwash",
+      price: 95,
+      category: "Household",
+      brand: "Vim",
+      rating: 4.1,
+      image:
+        "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=600&q=80",
+    },
+  ];
 
   /* =================================
      FILTER STATES
   ================================= */
 
   const [search, setSearch] = useState("");
+
   const [category, setCategory] = useState("All");
+
   const [brand, setBrand] = useState("All");
+
   const [maxPrice, setMaxPrice] = useState("");
+
   const [minRating, setMinRating] = useState("All");
+
   const [sortBy, setSortBy] = useState("default");
-
-  /* =================================
-     FETCH PRODUCTS FROM BACKEND
-  ================================= */
-
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await fetch(`${API_URL}/products`);
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch products");
-        }
-
-        const result = await response.json();
-
-        const apiProducts = result.data || [];
-
-        const formattedProducts = apiProducts.map((product) => ({
-          id: product.id,
-          name: product.name,
-          price: Number(product.price) || 0,
-          category: product.category_name || "Other",
-          brand: product.brand_name || "Other",
-          rating: Number(product.rating) || 0,
-          image: product.image_url || "",
-          description: product.description || "",
-          stock_quantity: Number(product.stock_quantity) || 0,
-          unit: product.unit || "piece",
-          store_id: product.store_id,
-          is_available: product.is_available,
-        }));
-
-        setProducts(formattedProducts);
-      } catch (err) {
-        console.error("Error fetching products:", err);
-        setError("Unable to load products. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProducts();
-  }, []);
 
   /* =================================
      FILTER OPTIONS
   ================================= */
 
-  const categories = useMemo(() => {
-    const uniqueCategories = [
-      ...new Set(
-        products
-          .map((product) => product.category)
-          .filter(Boolean)
-      ),
-    ];
+  const categories = [
+    "All",
+    "Groceries",
+    "Snacks",
+    "Beverages",
+    "Household",
+  ];
 
-    return ["All", ...uniqueCategories];
-  }, [products]);
-
-  const brands = useMemo(() => {
-    const uniqueBrands = [
-      ...new Set(
-        products
-          .map((product) => product.brand)
-          .filter(Boolean)
-      ),
-    ];
-
-    return ["All", ...uniqueBrands];
-  }, [products]);
+  const brands = [
+    "All",
+    ...new Set(products.map((product) => product.brand)),
+  ];
 
   /* =================================
      FILTER + SORT PRODUCTS
@@ -104,26 +142,18 @@ function Products() {
     let result = [...products];
 
     /* Search */
-
     if (search.trim()) {
       const searchText = search.toLowerCase();
 
-      result = result.filter((product) => {
-        const name = product.name?.toLowerCase() || "";
-        const brandName = product.brand?.toLowerCase() || "";
-        const categoryName =
-          product.category?.toLowerCase() || "";
-
-        return (
-          name.includes(searchText) ||
-          brandName.includes(searchText) ||
-          categoryName.includes(searchText)
-        );
-      });
+      result = result.filter(
+        (product) =>
+          product.name.toLowerCase().includes(searchText) ||
+          product.brand.toLowerCase().includes(searchText) ||
+          product.category.toLowerCase().includes(searchText)
+      );
     }
 
     /* Category */
-
     if (category !== "All") {
       result = result.filter(
         (product) => product.category === category
@@ -131,7 +161,6 @@ function Products() {
     }
 
     /* Brand */
-
     if (brand !== "All") {
       result = result.filter(
         (product) => product.brand === brand
@@ -139,16 +168,13 @@ function Products() {
     }
 
     /* Maximum Price */
-
     if (maxPrice) {
       result = result.filter(
-        (product) =>
-          product.price <= Number(maxPrice)
+        (product) => product.price <= Number(maxPrice)
       );
     }
 
     /* Rating */
-
     if (minRating !== "All") {
       result = result.filter(
         (product) =>
@@ -157,23 +183,16 @@ function Products() {
     }
 
     /* Sorting */
-
     if (sortBy === "price-low") {
-      result.sort(
-        (a, b) => a.price - b.price
-      );
+      result.sort((a, b) => a.price - b.price);
     }
 
     if (sortBy === "price-high") {
-      result.sort(
-        (a, b) => b.price - a.price
-      );
+      result.sort((a, b) => b.price - a.price);
     }
 
     if (sortBy === "rating") {
-      result.sort(
-        (a, b) => b.rating - a.rating
-      );
+      result.sort((a, b) => b.rating - a.rating);
     }
 
     if (sortBy === "name") {
@@ -184,7 +203,6 @@ function Products() {
 
     return result;
   }, [
-    products,
     search,
     category,
     brand,
@@ -206,28 +224,6 @@ function Products() {
     setSortBy("default");
   };
 
-  /* =================================
-     LOADING STATE
-  ================================= */
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-emerald-50">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600"></div>
-
-          <p className="text-lg font-semibold text-gray-700">
-            Loading products...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  /* =================================
-     MAIN UI
-  ================================= */
-
   return (
     <div className="min-h-screen bg-emerald-50">
 
@@ -236,6 +232,7 @@ function Products() {
       ================================= */}
 
       <section className="bg-white px-6 py-10 shadow-sm md:px-10">
+
         <div className="mx-auto max-w-7xl">
 
           <div className="mb-6">
@@ -265,9 +262,7 @@ function Products() {
             <input
               type="text"
               value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search products, brands or categories..."
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-12 py-4 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
             />
@@ -275,19 +270,8 @@ function Products() {
           </div>
 
         </div>
+
       </section>
-
-      {/* =================================
-          ERROR
-      ================================= */}
-
-      {error && (
-        <div className="mx-auto mt-6 max-w-7xl px-6 md:px-10">
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-red-600">
-            {error}
-          </div>
-        </div>
-      )}
 
       {/* =================================
           MAIN CONTENT
@@ -335,10 +319,7 @@ function Products() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               >
                 {categories.map((item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
+                  <option key={item} value={item}>
                     {item === "All"
                       ? "All Categories"
                       : item}
@@ -364,10 +345,7 @@ function Products() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               >
                 {brands.map((item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
+                  <option key={item} value={item}>
                     {item === "All"
                       ? "All Brands"
                       : item}
@@ -377,7 +355,7 @@ function Products() {
 
             </div>
 
-            {/* Maximum Price */}
+            {/* Price */}
 
             <div className="mb-6">
 
@@ -406,7 +384,7 @@ function Products() {
 
             </div>
 
-            {/* Minimum Rating */}
+            {/* Rating */}
 
             <div>
 
@@ -421,19 +399,21 @@ function Products() {
                 }
                 className="w-full rounded-lg border border-gray-300 px-3 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               >
-
                 <option value="All">
                   All Ratings
                 </option>
 
                 <option value="4">
-                  4★ & Above
+                  ⭐ 4.0 & above
                 </option>
 
                 <option value="4.5">
-                  4.5★ & Above
+                  ⭐ 4.5 & above
                 </option>
 
+                <option value="3">
+                  ⭐ 3.0 & above
+                </option>
               </select>
 
             </div>
@@ -446,76 +426,77 @@ function Products() {
 
           <section>
 
-            {/* Top Bar */}
+            {/* Top bar */}
 
-            <div className="mb-6 flex flex-col justify-between gap-4 rounded-2xl bg-white p-5 shadow-sm sm:flex-row sm:items-center">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-              <div>
-
-                <p className="text-sm text-gray-500">
-                  Showing
-                </p>
-
-                <p className="text-lg font-bold text-gray-800">
-                  {filteredProducts.length} Products
-                </p>
-
-              </div>
+              <p className="text-gray-600">
+                Showing{" "}
+                <span className="font-bold text-gray-800">
+                  {filteredProducts.length}
+                </span>{" "}
+                products
+              </p>
 
               {/* Sort */}
 
-              <div className="flex items-center gap-3">
+              <select
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(e.target.value)
+                }
+                className="rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-emerald-500"
+              >
+                <option value="default">
+                  Sort: Recommended
+                </option>
 
-                <label className="text-sm font-semibold text-gray-600">
-                  Sort by:
-                </label>
+                <option value="price-low">
+                  Price: Low to High
+                </option>
 
-                <select
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(e.target.value)
-                  }
-                  className="rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                >
+                <option value="price-high">
+                  Price: High to Low
+                </option>
 
-                  <option value="default">
-                    Default
-                  </option>
+                <option value="rating">
+                  Rating: High to Low
+                </option>
 
-                  <option value="price-low">
-                    Price: Low to High
-                  </option>
-
-                  <option value="price-high">
-                    Price: High to Low
-                  </option>
-
-                  <option value="rating">
-                    Rating
-                  </option>
-
-                  <option value="name">
-                    Name
-                  </option>
-
-                </select>
-
-              </div>
+                <option value="name">
+                  Name: A to Z
+                </option>
+              </select>
 
             </div>
 
-            {/* No Products */}
+            {/* Product Grid */}
 
-            {filteredProducts.length === 0 ? (
+            {filteredProducts.length > 0 ? (
 
-              <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
+              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
 
-                <div className="mb-4 text-5xl">
-                  🛒
+                {filteredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                  />
+                ))}
+
+              </div>
+
+            ) : (
+
+              /* Empty State */
+
+              <div className="rounded-2xl bg-white px-6 py-16 text-center shadow-sm">
+
+                <div className="mb-4 text-6xl">
+                  🔎
                 </div>
 
                 <h2 className="text-2xl font-bold text-gray-800">
-                  No Products Found
+                  No products found
                 </h2>
 
                 <p className="mt-2 text-gray-500">
@@ -525,30 +506,10 @@ function Products() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="mt-6 rounded-lg bg-emerald-600 px-6 py-3 font-semibold text-white transition hover:bg-emerald-700"
+                  className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white hover:bg-emerald-700"
                 >
                   Clear Filters
                 </button>
-
-              </div>
-
-            ) : (
-
-              /* Product Grid */
-
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-
-                {filteredProducts.map((product) => (
-
-                  <div key={product.id}>
-
-                    <ProductCard
-                      product={product}
-                    />
-
-                  </div>
-
-                ))}
 
               </div>
 
