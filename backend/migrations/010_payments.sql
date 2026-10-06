@@ -15,6 +15,15 @@ CREATE TABLE IF NOT EXISTS payments (
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    -- Razorpay details
+    razorpay_order_id VARCHAR(255),
+
+    razorpay_payment_id VARCHAR(255),
+
+    razorpay_signature VARCHAR(255),
+
     CONSTRAINT fk_payments_order
         FOREIGN KEY (order_id)
         REFERENCES orders(id)
@@ -24,9 +33,7 @@ CREATE TABLE IF NOT EXISTS payments (
         CHECK (
             payment_method IN (
                 'cash_on_delivery',
-                'upi',
-                'card',
-                'net_banking'
+                'razorpay'
             )
         ),
 
@@ -34,12 +41,20 @@ CREATE TABLE IF NOT EXISTS payments (
         CHECK (
             status IN (
                 'pending',
+                'cod_pending',
                 'success',
                 'failed',
+                'refund_pending',
                 'refunded'
             )
         ),
 
     CONSTRAINT payments_amount_check
-        CHECK (amount >= 0)
+        CHECK (amount > 0)
 );
+
+CREATE INDEX IF NOT EXISTS idx_payments_razorpay_order_id
+    ON payments(razorpay_order_id);
+
+CREATE INDEX IF NOT EXISTS idx_payments_razorpay_payment_id
+    ON payments(razorpay_payment_id);
