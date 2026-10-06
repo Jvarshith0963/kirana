@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import ProductCard from "../../components/ProductCard";
@@ -7,163 +8,132 @@ import SearchBar from "../../components/SearchBar";
 import LocationSelector from "../../components/LocationSelector";
 import NearbyStores from "../../components/NearbyStores";
 
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
 function Home() {
-  // ==========================================
-  // TEMPORARY CATEGORY DATA
-  // Later: Replace with Varshith's API
-  // ==========================================
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
 
-  const categories = [
-    {
-      id: 1,
-      name: "Groceries",
-      icon: "🌾",
-    },
-    {
-      id: 2,
-      name: "Snacks",
-      icon: "🍪",
-    },
-    {
-      id: 3,
-      name: "Beverages",
-      icon: "🥤",
-    },
-    {
-      id: 4,
-      name: "Household",
-      icon: "🧹",
-    },
-    {
-      id: 5,
-      name: "Personal Care",
-      icon: "🧴",
-    },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // ==========================================
-  // POPULAR PRODUCTS
-  // Later: Replace with API data
-  // ==========================================
+  /* ==========================================
+     FETCH CATEGORIES + PRODUCTS FROM BACKEND
+  ========================================== */
 
-  const popularProducts = [
-    {
-      id: 1,
-      name: "Aashirvaad Atta",
-      brand: "Aashirvaad",
-      price: 250,
-      category: "Groceries",
-      image:
-        "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80",
-      rating: 4.5,
-      popular: true,
-    },
-    {
-      id: 2,
-      name: "India Gate Rice",
-      brand: "India Gate",
-      price: 180,
-      category: "Groceries",
-      image:
-        "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?auto=format&fit=crop&w=600&q=80",
-      rating: 4.6,
-      popular: true,
-    },
-    {
-      id: 3,
-      name: "Tata Salt",
-      brand: "Tata",
-      price: 30,
-      category: "Groceries",
-      image:
-        "https://5.imimg.com/data5/CF/SS/GLADMIN-38220085/tata-salt-1000x1000.png",
-      rating: 4.4,
-      popular: true,
-    },
-  ];
+  useEffect(() => {
+    const fetchHomeData = async () => {
+      try {
+        setLoading(true);
+        setError("");
 
-  // ==========================================
-  // SEARCH PRODUCTS
-  // Later: Replace with Varshith's API
-  // ==========================================
+        const [productsResponse, categoriesResponse] =
+          await Promise.all([
+            fetch(`${API_URL}/products`),
+            fetch(`${API_URL}/categories`),
+          ]);
 
-  const searchProducts = [
-    {
-      id: 1,
-      name: "Aashirvaad Atta",
-      brand: "Aashirvaad",
-      price: 250,
-      category: "Groceries",
-      image:
-        "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 2,
-      name: "India Gate Rice",
-      brand: "India Gate",
-      price: 180,
-      category: "Groceries",
-      image:
-        "https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 3,
-      name: "Tata Salt",
-      brand: "Tata",
-      price: 30,
-      category: "Groceries",
-      image:
-        "https://images.unsplash.com/photo-1518110925495-5c3b0f7a4f2b?auto=format&fit=crop&w=600&q=80",
-    },
-    {
-      id: 4,
-      name: "Fortune Sunflower Oil",
-      brand: "Fortune",
-      price: 145,
-      category: "Oil",
-      image: "",
-    },
-    {
-      id: 5,
-      name: "Maggi Noodles",
-      brand: "Nestle",
-      price: 60,
-      category: "Snacks",
-      image: "",
-    },
-    {
-      id: 6,
-      name: "Amul Milk",
-      brand: "Amul",
-      price: 32,
-      category: "Dairy",
-      image: "",
-    },
-    {
-      id: 7,
-      name: "Britannia Bread",
-      brand: "Britannia",
-      price: 45,
-      category: "Bakery",
-      image: "",
-    },
-    {
-      id: 8,
-      name: "Thums Up",
-      brand: "Coca Cola",
-      price: 40,
-      category: "Beverages",
-      image: "",
-    },
-    {
-      id: 9,
-      name: "Surf Excel",
-      brand: "Surf Excel",
-      price: 180,
-      category: "Household",
-      image: "",
-    },
-  ];
+        if (!productsResponse.ok) {
+          throw new Error("Failed to fetch products");
+        }
+
+        if (!categoriesResponse.ok) {
+          throw new Error("Failed to fetch categories");
+        }
+
+        const productsResult = await productsResponse.json();
+        const categoriesResult = await categoriesResponse.json();
+
+        /* ==========================================
+           FORMAT PRODUCTS
+        ========================================== */
+
+        const apiProducts = productsResult.data || [];
+
+        const formattedProducts = apiProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          brand: product.brand_name || "Other",
+          price: Number(product.price) || 0,
+          category: product.category_name || "Other",
+          image: product.image_url || "",
+          rating: Number(product.rating) || 0,
+          reviews: Number(product.reviews) || 0,
+          description: product.description || "",
+          stock: Number(product.stock_quantity) || 0,
+          unit: product.unit || "piece",
+          store_id: product.store_id,
+          is_available: product.is_available,
+          sku: product.sku,
+        }));
+
+        /* ==========================================
+           FORMAT CATEGORIES
+        ========================================== */
+
+        const apiCategories = categoriesResult.data || [];
+
+        const categoryIcons = {
+          groceries: "🌾",
+          snacks: "🍪",
+          beverages: "🥤",
+          household: "🧹",
+          "personal care": "🧴",
+          dairy: "🥛",
+          bakery: "🍞",
+          oil: "🫗",
+          fruits: "🍎",
+          vegetables: "🥦",
+          "home care": "🧹",
+          "dry fruits": "🥜",
+          "baby care": "🍼",
+        };
+
+        const formattedCategories = apiCategories.map(
+          (category) => {
+            const categoryName = category.name || "Other";
+
+            return {
+              id: category.id,
+              name: categoryName,
+              icon:
+                categoryIcons[
+                  categoryName.toLowerCase()
+                ] || "🛒",
+            };
+          }
+        );
+
+        setProducts(formattedProducts);
+        setCategories(formattedCategories);
+      } catch (err) {
+        console.error("Error loading home data:", err);
+        setError(
+          "Unable to load products and categories. Please try again."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHomeData();
+  }, []);
+
+  /* ==========================================
+     POPULAR PRODUCTS
+     Use first 3 products from backend
+  ========================================== */
+
+  const popularProducts = products.slice(0, 3);
+
+  /* ==========================================
+     SEARCH PRODUCTS
+     All backend products are available
+     to SearchBar
+  ========================================== */
+
+  const searchProducts = products;
 
   return (
     <div
@@ -174,6 +144,18 @@ function Home() {
       }}
     >
       <div className="min-h-screen bg-white/80">
+
+        {/* ==========================================
+            ERROR MESSAGE
+        ========================================== */}
+
+        {error && (
+          <div className="px-4 pt-4 sm:px-6 md:px-10">
+            <div className="mx-auto max-w-7xl rounded-xl border border-red-200 bg-red-50 p-4 text-center font-semibold text-red-600">
+              {error}
+            </div>
+          </div>
+        )}
 
         {/* ==========================================
             HERO SECTION
@@ -194,8 +176,8 @@ function Home() {
             </h1>
 
             <p className="mx-auto mb-8 max-w-2xl text-base leading-7 text-gray-600 sm:text-lg">
-              Buy groceries and daily essentials from trusted local vendors
-              and get everything you need in one place.
+              Buy groceries and daily essentials from trusted local
+              vendors and get everything you need in one place.
             </p>
 
             <Link
@@ -208,7 +190,6 @@ function Home() {
           </div>
         </section>
 
-
         {/* ==========================================
             SEARCH + LOCATION
         ========================================== */}
@@ -216,22 +197,18 @@ function Home() {
         <section className="px-4 pb-10 sm:px-6 md:px-10">
           <div className="mx-auto max-w-3xl space-y-4">
 
-            {/* Search */}
             <SearchBar products={searchProducts} />
 
-            {/* Location */}
             <LocationSelector />
 
           </div>
         </section>
-
 
         {/* ==========================================
             OFFER BANNER
         ========================================== */}
 
         <OfferBanner />
-
 
         {/* ==========================================
             CATEGORIES
@@ -261,31 +238,44 @@ function Home() {
 
             </div>
 
-            <div className="flex gap-3 overflow-x-auto pb-3">
-              {categories.map((category) => (
-                <div
-                  key={category.id}
-                  className="flex shrink-0 items-center gap-2"
-                >
-                  <span className="text-xl">
-                    {category.icon}
-                  </span>
+            {loading ? (
+              <div className="flex gap-3 overflow-x-auto pb-3">
+                {[1, 2, 3, 4, 5].map((item) => (
+                  <div
+                    key={item}
+                    className="h-12 w-32 shrink-0 animate-pulse rounded-xl bg-gray-200"
+                  />
+                ))}
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="rounded-xl bg-white p-6 text-center text-gray-500 shadow-sm">
+                No categories available.
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-3">
+                {categories.map((category) => (
+                  <div
+                    key={category.id}
+                    className="flex shrink-0 items-center gap-2"
+                  >
+                    <span className="text-xl">
+                      {category.icon}
+                    </span>
 
-                  <CategoryChip category={category} />
-                </div>
-              ))}
-            </div>
+                    <CategoryChip category={category} />
+                  </div>
+                ))}
+              </div>
+            )}
 
           </div>
         </section>
-
 
         {/* ==========================================
             NEARBY STORES
         ========================================== */}
 
         <NearbyStores />
-
 
         {/* ==========================================
             POPULAR PRODUCTS
@@ -315,18 +305,32 @@ function Home() {
 
             </div>
 
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {popularProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                />
-              ))}
-            </div>
+            {loading ? (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="h-80 animate-pulse rounded-2xl bg-white shadow-sm"
+                  />
+                ))}
+              </div>
+            ) : popularProducts.length === 0 ? (
+              <div className="rounded-2xl bg-white p-10 text-center text-gray-500 shadow-sm">
+                No products available.
+              </div>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {popularProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                  />
+                ))}
+              </div>
+            )}
 
           </div>
         </section>
-
 
         {/* ==========================================
             BOTTOM CTA

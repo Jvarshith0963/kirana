@@ -16,7 +16,7 @@ function NearbyStores() {
       deliveryTime: "20-30 mins",
       deliveryRadius: "5 km",
       image:
-        "https://www.theweekendleader.com/admin/upload/05_01_2021_09_23_58_kiranastore.jpg",
+        "https://images.unsplash.com/photo-1604719312566-8912e9c8a213?auto=format&fit=crop&w=800&q=80",
     },
     {
       id: 2,
