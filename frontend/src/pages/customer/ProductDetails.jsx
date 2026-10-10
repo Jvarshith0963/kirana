@@ -1,152 +1,218 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const MOCK_PRODUCTS = [
+  {
+    id: 1,
+    name: "Aashirvaad Atta",
+    price: 245,
+    category: "Grocery",
+    brand: "Aashirvaad",
+    rating: 4.5,
+    reviews: 120,
+    image: "",
+    icon: "🌾",
+    description: "Premium quality whole wheat flour suitable for everyday cooking.",
+    stock: 25,
+    unit: "5 kg",
+    is_available: true,
+    sku: "AASH-ATTA-5KG",
+  },
+  {
+    id: 2,
+    name: "Tata Salt",
+    price: 28,
+    category: "Grocery",
+    brand: "Tata",
+    rating: 4.6,
+    reviews: 180,
+    image: "",
+    icon: "🧂",
+    description: "Iodized vacuum evaporated salt for everyday cooking.",
+    stock: 50,
+    unit: "1 kg",
+    is_available: true,
+    sku: "TATA-SALT-1KG",
+  },
+  {
+    id: 3,
+    name: "India Gate Basmati Rice",
+    price: 320,
+    category: "Rice & Grains",
+    brand: "India Gate",
+    rating: 4.7,
+    reviews: 210,
+    image: "",
+    icon: "🍚",
+    description: "Premium long-grain basmati rice with excellent aroma and taste.",
+    stock: 30,
+    unit: "5 kg",
+    is_available: true,
+    sku: "IG-RICE-5KG",
+  },
+  {
+    id: 4,
+    name: "Fortune Sunflower Oil",
+    price: 155,
+    category: "Cooking Oil",
+    brand: "Fortune",
+    rating: 4.4,
+    reviews: 95,
+    image: "",
+    icon: "🫗",
+    description: "Light and healthy sunflower cooking oil for everyday meals.",
+    stock: 20,
+    unit: "1 L",
+    is_available: true,
+    sku: "FORT-OIL-1L",
+  },
+  {
+    id: 5,
+    name: "Amul Milk",
+    price: 32,
+    category: "Dairy",
+    brand: "Amul",
+    rating: 4.8,
+    reviews: 300,
+    image: "",
+    icon: "🥛",
+    description: "Fresh and nutritious toned milk for everyday consumption.",
+    stock: 40,
+    unit: "500 ml",
+    is_available: true,
+    sku: "AMUL-MILK-500",
+  },
+  {
+    id: 6,
+    name: "Britannia Good Day Biscuits",
+    price: 40,
+    category: "Snacks",
+    brand: "Britannia",
+    rating: 4.3,
+    reviews: 150,
+    image: "",
+    icon: "🍪",
+    description: "Crunchy biscuits with a delicious cashew flavor.",
+    stock: 35,
+    unit: "200 g",
+    is_available: true,
+    sku: "BRIT-GD-200",
+  },
+  {
+    id: 7,
+    name: "Surf Excel Matic",
+    price: 210,
+    category: "Household",
+    brand: "Surf Excel",
+    rating: 4.5,
+    reviews: 130,
+    image: "",
+    icon: "🧺",
+    description: "Powerful detergent designed for washing machines.",
+    stock: 18,
+    unit: "2 kg",
+    is_available: true,
+    sku: "SURF-MATIC-2KG",
+  },
+  {
+    id: 8,
+    name: "Dove Soap",
+    price: 65,
+    category: "Personal Care",
+    brand: "Dove",
+    rating: 4.6,
+    reviews: 170,
+    image: "",
+    icon: "🧼",
+    description: "Gentle moisturizing soap for soft and smooth skin.",
+    stock: 45,
+    unit: "100 g",
+    is_available: true,
+    sku: "DOVE-SOAP-100",
+  },
+  {
+    id: 9,
+    name: "Maggi 2-Minute Noodles",
+    price: 60,
+    category: "Instant Food",
+    brand: "Maggi",
+    rating: 4.7,
+    reviews: 250,
+    image: "",
+    icon: "🍜",
+    description: "Classic instant noodles that are quick and easy to prepare.",
+    stock: 60,
+    unit: "4 pack",
+    is_available: true,
+    sku: "MAGGI-4PK",
+  },
+  {
+    id: 10,
+    name: "Red Label Tea",
+    price: 145,
+    category: "Beverages",
+    brand: "Brooke Bond",
+    rating: 4.5,
+    reviews: 110,
+    image: "",
+    icon: "🍵",
+    description: "Rich and refreshing tea for everyday moments.",
+    stock: 25,
+    unit: "500 g",
+    is_available: true,
+    sku: "REDLABEL-500",
+  },
+  {
+    id: 11,
+    name: "Colgate Toothpaste",
+    price: 99,
+    category: "Personal Care",
+    brand: "Colgate",
+    rating: 4.4,
+    reviews: 200,
+    image: "",
+    icon: "🪥",
+    description: "Complete oral protection toothpaste for everyday use.",
+    stock: 30,
+    unit: "200 g",
+    is_available: true,
+    sku: "COLGATE-200",
+  },
+  {
+    id: 12,
+    name: "Thums Up",
+    price: 45,
+    category: "Beverages",
+    brand: "Coca-Cola",
+    rating: 4.2,
+    reviews: 90,
+    image: "",
+    icon: "🥤",
+    description: "Refreshing and bold carbonated soft drink.",
+    stock: 40,
+    unit: "750 ml",
+    is_available: true,
+    sku: "THUMS-750",
+  },
+];
 
 function ProductDetails() {
   const { id } = useParams();
 
-  const { addToCart, wishlistItems, addToWishlist, removeFromWishlist } =
-    useCart();
+  const {
+    addToCart,
+    wishlistItems = [],
+    addToWishlist,
+    removeFromWishlist,
+  } = useCart();
 
-  const [product, setProduct] = useState(null);
-  const [quantity, setQuantity] = useState(1);
-  const [addedToCart, setAddedToCart] = useState(false);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  /* =================================
-     FETCH PRODUCT FROM BACKEND
-  ================================= */
-
-  useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await fetch(`${API_URL}/products/${id}`);
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            setProduct(null);
-            return;
-          }
-
-          throw new Error("Failed to fetch product");
-        }
-
-        const result = await response.json();
-        const apiProduct = result.data;
-
-        if (!apiProduct) {
-          setProduct(null);
-          return;
-        }
-
-        setProduct({
-          id: apiProduct.id,
-          name: apiProduct.name,
-          price: Number(apiProduct.price) || 0,
-          category: apiProduct.category_name || "Other",
-          brand: apiProduct.brand_name || "Other",
-          rating: Number(apiProduct.rating) || 0,
-          reviews: Number(apiProduct.reviews) || 0,
-          image: apiProduct.image_url || "",
-          description:
-            apiProduct.description ||
-            "No description available for this product.",
-          stock: Number(apiProduct.stock_quantity) || 0,
-          unit: apiProduct.unit || "piece",
-          store_id: apiProduct.store_id,
-          is_available: apiProduct.is_available,
-          sku: apiProduct.sku,
-        });
-        setQuantity(1);
-      } catch (err) {
-        console.error("Error fetching product:", err);
-        setError("Unable to load product. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchProduct();
-    }
-  }, [id]);
-
-  /* =================================
-     WISHLIST (real, via CartContext)
-  ================================= */
-
-  const wishlistEntry = (wishlistItems || []).find(
-    (item) =>
-      String(item.productId ?? item.product_id ?? item.id) ===
-      String(product?.id)
+  const product = MOCK_PRODUCTS.find(
+    (item) => String(item.id) === String(id)
   );
 
-  const handleToggleWishlist = () => {
-    if (!product) return;
-
-    if (wishlistEntry) {
-      removeFromWishlist(wishlistEntry.id ?? product.id);
-    } else {
-      addToWishlist(product);
-    }
-  };
-
-  /* =================================
-     LOADING
-  ================================= */
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-emerald-50 px-6">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600"></div>
-
-          <p className="text-lg font-semibold text-gray-700">
-            Loading product...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  /* =================================
-     ERROR
-  ================================= */
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-emerald-50 px-6">
-        <div className="rounded-2xl bg-white p-10 text-center shadow-lg">
-          <div className="mb-4 text-6xl">⚠️</div>
-
-          <h1 className="text-3xl font-bold text-gray-800">
-            Something went wrong
-          </h1>
-
-          <p className="mt-3 text-gray-500">{error}</p>
-
-          <Link
-            to="/products"
-            className="mt-6 inline-block rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white hover:bg-emerald-700"
-          >
-            ← Back to Products
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  /* =================================
-     PRODUCT NOT FOUND
-  ================================= */
+  const [quantity, setQuantity] = useState(1);
+  const [addedToCart, setAddedToCart] = useState(false);
 
   if (!product) {
     return (
@@ -173,25 +239,40 @@ function ProductDetails() {
     );
   }
 
-  /* =================================
-     ADD TO CART
-  ================================= */
+  const wishlistEntry = wishlistItems.find(
+    (item) =>
+      String(item.productId ?? item.product_id ?? item.id) ===
+      String(product.id)
+  );
 
-  const inStock = product.stock > 0 && product.is_available !== false;
+  const inStock =
+    product.stock > 0 && product.is_available !== false;
 
-  const handleAddToCart = () => {
+  const handleToggleWishlist = () => {
+    if (wishlistEntry) {
+      removeFromWishlist(wishlistEntry.id ?? product.id);
+    } else {
+      addToWishlist(product);
+    }
+  };
+
+  const handleAddToCart = async () => {
     if (!inStock) return;
 
-    addToCart({
-      ...product,
-      quantity,
-    });
+    try {
+      await addToCart({
+        ...product,
+        quantity,
+      });
 
-    setAddedToCart(true);
+      setAddedToCart(true);
 
-    setTimeout(() => {
-      setAddedToCart(false);
-    }, 1500);
+      setTimeout(() => {
+        setAddedToCart(false);
+      }, 1500);
+    } catch (error) {
+      console.error("Add to cart error:", error);
+    }
   };
 
   const fullStars = Math.round(product.rating);
@@ -199,6 +280,8 @@ function ProductDetails() {
   return (
     <div className="min-h-screen bg-emerald-50 px-5 py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
+
+        {/* BACK */}
         <Link
           to="/products"
           className="mb-6 inline-flex items-center font-semibold text-emerald-700 hover:text-emerald-900"
@@ -207,35 +290,42 @@ function ProductDetails() {
         </Link>
 
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl">
-          <div className="grid md:grid-cols-2">
-            {/* PRODUCT IMAGE */}
-            <div className="relative flex min-h-[420px] items-center justify-center bg-emerald-50 p-8">
-              <img
-                src={
-                  product.image ||
-                  "https://via.placeholder.com/700x500?text=Product"
-                }
-                alt={product.name}
-                className="h-full max-h-[420px] w-full rounded-2xl object-cover shadow-md"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src =
-                    "https://via.placeholder.com/700x500?text=Product";
-                }}
-              />
 
+          <div className="grid md:grid-cols-2">
+
+            {/* IMAGE */}
+            <div className="relative flex min-h-[420px] items-center justify-center bg-emerald-50 p-8">
+
+              {product.image ? (
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="h-full max-h-[420px] w-full rounded-2xl object-cover shadow-md"
+                />
+              ) : (
+                <div className="flex h-full min-h-[350px] w-full items-center justify-center rounded-2xl bg-emerald-100 text-9xl">
+                  {product.icon}
+                </div>
+              )}
+
+              {/* WISHLIST */}
               <button
                 type="button"
                 onClick={handleToggleWishlist}
-                aria-label="Toggle wishlist"
+                aria-label={
+                  wishlistEntry
+                    ? "Remove from wishlist"
+                    : "Add to wishlist"
+                }
                 className="absolute right-8 top-8 flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-lg transition hover:scale-110"
               >
                 {wishlistEntry ? "❤️" : "🤍"}
               </button>
             </div>
 
-            {/* PRODUCT INFORMATION */}
+            {/* PRODUCT INFO */}
             <div className="p-8 md:p-10">
+
               <div className="flex flex-wrap gap-2">
                 <span className="rounded-full bg-emerald-100 px-4 py-1.5 text-sm font-semibold text-emerald-700">
                   {product.category}
@@ -250,51 +340,46 @@ function ProductDetails() {
                 {product.name}
               </h1>
 
-              {product.rating > 0 ? (
-                <div className="mt-4 flex items-center gap-3">
-                  <span className="text-xl text-yellow-500">
-                    {"★".repeat(fullStars)}
-                  </span>
+              {/* RATING */}
+              <div className="mt-4 flex items-center gap-3">
+                <span className="text-xl text-yellow-500">
+                  {"★".repeat(fullStars)}
+                </span>
 
-                  <span className="font-semibold text-gray-700">
-                    {product.rating}
-                  </span>
+                <span className="font-semibold text-gray-700">
+                  {product.rating}
+                </span>
 
-                  {product.reviews > 0 && (
-                    <span className="text-gray-500">
-                      ({product.reviews} reviews)
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-4 text-sm text-gray-500">
-                  Rating not available
-                </div>
-              )}
+                <span className="text-gray-500">
+                  ({product.reviews} reviews)
+                </span>
+              </div>
 
+              {/* PRICE */}
               <div className="mt-6">
                 <span className="text-4xl font-extrabold text-emerald-600">
                   ₹{product.price.toFixed(2)}
                 </span>
 
-                {product.unit && (
-                  <span className="ml-2 text-gray-500">/ {product.unit}</span>
-                )}
+                <span className="ml-2 text-gray-500">
+                  / {product.unit}
+                </span>
               </div>
 
+              {/* DESCRIPTION */}
               <p className="mt-6 leading-7 text-gray-600">
                 {product.description}
               </p>
 
-              {product.sku && (
-                <div className="mt-4 text-sm text-gray-500">
-                  SKU:{" "}
-                  <span className="font-semibold text-gray-700">
-                    {product.sku}
-                  </span>
-                </div>
-              )}
+              {/* SKU */}
+              <div className="mt-4 text-sm text-gray-500">
+                SKU:{" "}
+                <span className="font-semibold text-gray-700">
+                  {product.sku}
+                </span>
+              </div>
 
+              {/* STOCK */}
               <div className="mt-5">
                 {inStock ? (
                   <p className="font-semibold text-green-600">
@@ -304,18 +389,25 @@ function ProductDetails() {
                     </span>
                   </p>
                 ) : (
-                  <p className="font-semibold text-red-600">✕ Out of Stock</p>
+                  <p className="font-semibold text-red-600">
+                    ✕ Out of Stock
+                  </p>
                 )}
               </div>
 
-              {/* Quantity */}
+              {/* QUANTITY */}
               <div className="mt-7">
-                <p className="mb-3 font-bold text-gray-700">Quantity</p>
+                <p className="mb-3 font-bold text-gray-700">
+                  Quantity
+                </p>
 
                 <div className="flex items-center gap-4">
+
                   <button
                     type="button"
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    onClick={() =>
+                      setQuantity(Math.max(1, quantity - 1))
+                    }
                     className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-2xl font-bold text-gray-700 transition hover:bg-gray-200"
                   >
                     −
@@ -329,26 +421,30 @@ function ProductDetails() {
                     type="button"
                     onClick={() =>
                       setQuantity(
-                        Math.max(1, Math.min(product.stock, quantity + 1))
+                        Math.min(product.stock, quantity + 1)
                       )
                     }
-                    disabled={product.stock === 0}
+                    disabled={!inStock || quantity >= product.stock}
                     className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-2xl font-bold text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     +
                   </button>
+
                 </div>
               </div>
 
-              {/* Buttons */}
+              {/* BUTTONS */}
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+
                 <button
                   type="button"
                   onClick={handleAddToCart}
                   disabled={!inStock}
                   className="flex-1 rounded-xl bg-emerald-600 px-6 py-4 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                 >
-                  {addedToCart ? "✓ Added to Cart" : "🛒 Add to Cart"}
+                  {addedToCart
+                    ? "✓ Added to Cart"
+                    : "🛒 Add to Cart"}
                 </button>
 
                 <button
@@ -356,50 +452,73 @@ function ProductDetails() {
                   onClick={handleToggleWishlist}
                   className="rounded-xl border-2 border-emerald-600 px-6 py-4 font-bold text-emerald-700 transition hover:bg-emerald-50"
                 >
-                  {wishlistEntry ? "❤️ Wishlisted" : "♡ Wishlist"}
+                  {wishlistEntry
+                    ? "❤️ Wishlisted"
+                    : "♡ Wishlist"}
                 </button>
+
               </div>
             </div>
           </div>
 
           {/* PRODUCT INFORMATION */}
           <div className="border-t bg-gray-50 p-8 md:p-10">
+
             <h2 className="text-2xl font-extrabold text-gray-800">
               Product Information
             </h2>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
               <div className="rounded-xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Category</p>
+                <p className="text-sm text-gray-500">
+                  Category
+                </p>
+
                 <p className="mt-1 font-bold text-gray-800">
                   {product.category}
                 </p>
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Brand</p>
-                <p className="mt-1 font-bold text-gray-800">{product.brand}</p>
-              </div>
+                <p className="text-sm text-gray-500">
+                  Brand
+                </p>
 
-              <div className="rounded-xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Rating</p>
                 <p className="mt-1 font-bold text-gray-800">
-                  {product.rating > 0 ? `⭐ ${product.rating}` : "Not available"}
+                  {product.brand}
                 </p>
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-gray-500">Availability</p>
+                <p className="text-sm text-gray-500">
+                  Rating
+                </p>
+
+                <p className="mt-1 font-bold text-gray-800">
+                  ⭐ {product.rating}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-white p-5 shadow-sm">
+                <p className="text-sm text-gray-500">
+                  Availability
+                </p>
+
                 <p
                   className={`mt-1 font-bold ${
-                    inStock ? "text-green-600" : "text-red-600"
+                    inStock
+                      ? "text-green-600"
+                      : "text-red-600"
                   }`}
                 >
                   {inStock ? "In Stock" : "Out of Stock"}
                 </p>
               </div>
+
             </div>
           </div>
+
         </div>
       </div>
     </div>

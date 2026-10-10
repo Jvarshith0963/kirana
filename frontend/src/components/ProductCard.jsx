@@ -7,7 +7,7 @@ function ProductCard({ product }) {
     addToCart,
     addToWishlist,
     removeFromWishlist,
-    wishlistItems,
+    wishlistItems = [],
   } = useCart();
 
   const [imageError, setImageError] = useState(false);
@@ -15,36 +15,35 @@ function ProductCard({ product }) {
   const [added, setAdded] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
 
-  // Wishlist entry for this product, if one exists
-  const wishlistEntry = (wishlistItems || []).find(
-    (item) => String(item.productId ?? item.id) === String(product.id)
+  if (!product) return null;
+
+  const productId = product.id ?? product.productId;
+
+  const wishlistEntry = wishlistItems.find(
+    (item) =>
+      String(item.productId ?? item.product_id ?? item.id) ===
+      String(productId)
   );
 
   const isWishlisted = Boolean(wishlistEntry);
 
-  const outOfStock =
-    product.is_available === false ||
-    (product.stock_quantity !== undefined &&
-      Number(product.stock_quantity) <= 0);
+  const stock = Number(
+    product.stock_quantity ?? product.stock ?? 0
+  );
 
-  // ==========================================
-  // WISHLIST
-  // ==========================================
+  const outOfStock =
+    product.is_available === false || stock <= 0;
 
   const handleWishlist = (e) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (wishlistEntry) {
-      removeFromWishlist(wishlistEntry.id);
+      removeFromWishlist(wishlistEntry.id ?? productId);
     } else {
       addToWishlist(product);
     }
   };
-
-  // ==========================================
-  // ADD TO CART (shows success / error on the card)
-  // ==========================================
 
   const handleAddToCart = async (e) => {
     e.preventDefault();
@@ -59,38 +58,58 @@ function ProductCard({ product }) {
       const result = await addToCart(product);
 
       if (result?.ok === false) {
-        setCartMessage(result.message || "Could not add to cart.");
-      } else {
-        setAdded(true);
-        setTimeout(() => setAdded(false), 1500);
+        setCartMessage(
+          result.message || "Could not add this product to cart."
+        );
+        return;
       }
+
+      setAdded(true);
+
+      setTimeout(() => {
+        setAdded(false);
+      }, 1500);
     } catch (error) {
       console.error("Add to cart error:", error);
-      setCartMessage(error?.message || "Could not add to cart.");
+
+      setCartMessage(
+        "Could not add this product to cart."
+      );
     } finally {
       setAdding(false);
     }
   };
 
+  const price = Number(product.price) || 0;
+
   return (
     <div className="group relative overflow-hidden rounded-2xl bg-white shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+
       {/* PRODUCT IMAGE */}
       <div className="relative flex h-52 items-center justify-center bg-green-50">
+
         {!imageError && product.image ? (
           <img
             src={product.image}
-            alt={product.name}
+            alt={product.name || "Product"}
             className="h-full w-full object-cover"
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="text-6xl">{product.icon || "🛒"}</div>
+          <div className="text-6xl">
+            {product.icon || "🛒"}
+          </div>
         )}
 
-        {/* WISHLIST BUTTON */}
+        {/* WISHLIST */}
         <button
           type="button"
           onClick={handleWishlist}
+          aria-label={
+            isWishlisted
+              ? `Remove ${product.name} from wishlist`
+              : `Add ${product.name} to wishlist`
+          }
           className={`absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-2xl shadow-md transition hover:scale-110 ${
             isWishlisted
               ? "text-red-500"
@@ -103,25 +122,30 @@ function ProductCard({ product }) {
 
       {/* PRODUCT DETAILS */}
       <div className="p-5">
+
         {product.category && (
           <p className="mb-1 text-sm font-medium text-green-600">
             {product.category}
           </p>
         )}
 
-        <Link to={`/products/${product.id}`}>
+        <Link to={`/products/${productId}`}>
           <h2 className="min-h-[56px] text-lg font-bold text-gray-800 transition hover:text-green-600">
-            {product.name}
+            {product.name || "Unnamed Product"}
           </h2>
         </Link>
 
         {product.brand && (
-          <p className="mt-1 text-sm text-gray-500">{product.brand}</p>
+          <p className="mt-1 text-sm text-gray-500">
+            {product.brand}
+          </p>
         )}
 
-        {product.rating > 0 && (
+        {Number(product.rating) > 0 && (
           <div className="mt-2 flex items-center gap-1">
-            <span className="text-yellow-500">⭐</span>
+            <span className="text-yellow-500">
+              ⭐
+            </span>
 
             <span className="text-sm font-medium text-gray-700">
               {product.rating}
@@ -131,7 +155,10 @@ function ProductCard({ product }) {
 
         {/* PRICE + CART */}
         <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="text-xl font-bold text-green-700">₹{product.price}</p>
+
+          <p className="text-xl font-bold text-green-700">
+            ₹{price.toFixed(2)}
+          </p>
 
           <button
             type="button"
@@ -147,11 +174,18 @@ function ProductCard({ product }) {
               ? "✓ Added"
               : "Add to Cart"}
           </button>
+
         </div>
 
         {cartMessage && (
-          <p className="mt-2 text-xs text-red-500">{cartMessage}</p>
+          <p
+            role="alert"
+            className="mt-2 text-xs text-red-500"
+          >
+            {cartMessage}
+          </p>
         )}
+
       </div>
     </div>
   );

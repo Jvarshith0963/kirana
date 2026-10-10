@@ -3,137 +3,148 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
-import { useAuth } from "./AuthContext";
 
 const NotificationContext = createContext(null);
+const STORAGE_KEY = "kirana_notifications";
+const UPDATE_EVENT = "kirana-notifications-updated";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
-const POLL_INTERVAL_MS = 60000;
-
-function getToken() {
-  return localStorage.getItem("token");
+function readNotifications() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Unable to read notifications:", error);
+    return [];
+  }
 }
 
-async function apiRequest(endpoint, options = {}) {
-  const token = getToken();
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  let data = null;
+function writeNotifications(items) {
   try {
-    data = await response.json();
-  } catch {
-    data = null;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    return true;
+  } catch (error) {
+    console.error("Unable to save notifications:", error);
+    return false;
   }
+}
 
-  if (!response.ok) {
-    throw new Error(data?.message || "Notification request failed");
-  }
-
-  return data;
+function notifyOtherComponents() {
+  window.dispatchEvent(new Event(UPDATE_EVENT));
 }
 
 export function NotificationProvider({ children }) {
-  const { user } = useAuth();
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(readNotifications);
+  const [storageError, setStorageError] = useState("");
 
-  const loadNotifications = useCallback(async () => {
-    if (!getToken()) {
-      setNotifications([]);
-      return;
-    }
+  const loadNotifications = useCallback(() => {
+    setNotifications(readNotifications());
+  }, []);
 
-    try {
-      const response = await apiRequest("/notifications");
-      const items = Array.isArray(response?.data) ? response.data : [];
+  const updateNotifications = useCallback((updater) => {
+    const current = readNotifications();
+    const updated =
+      typeof updater === "function" ? updater(current) : updater;
 
-      setNotifications(
-        items.map((n) => ({
-          id: n.id,
-          title: n.title,
-          message: n.message,
-          type: n.type,
-          read: Boolean(n.is_read),
-          createdAt: n.created_at,
-        }))
-      );
-    } catch (error) {
-      console.error("Failed to load notifications:", error);
+    if (writeNotifications(updated)) {
+      setNotifications(updated);
+      setStorageError("");
+      notifyOtherComponents();
+    } else {
+      setStorageError("Notifications could not be saved in browser storage.");
     }
   }, []);
 
-  // Load immediately on login/logout (user changes), poll only while logged in
-  useEffect(() => {
-    loadNotifications();
+  const addNotification = useCallback(
+    (notification = {}) => {
+      const item = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title: notification.title || "New notification",
+        message: notification.message || "",
+        type: notification.type || "info",
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
 
-    if (!user) return undefined;
+      updateNotifications((current) => [item, ...current]);
+      return item;
+    },
+    [updateNotifications]
+  );
 
-    const interval = setInterval(loadNotifications, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [user, loadNotifications]);
-
-  const markAsRead = async (id) => {
-    try {
-      await apiRequest(`/notifications/${id}/read`, { method: "PATCH" });
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+  const markAsRead = useCallback(
+    (id) => {
+      updateNotifications((current) =>
+        current.map((item) =>
+          String(item.id) === String(id) ? { ...item, read: true } : item
+        )
       );
-    } catch (error) {
-      console.error("Mark as read failed:", error);
-    }
-  };
+    },
+    [updateNotifications]
+  );
 
-  const markAllAsRead = async () => {
-    try {
-      await apiRequest("/notifications/read-all", { method: "PATCH" });
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    } catch (error) {
-      console.error("Mark all as read failed:", error);
-    }
-  };
+  const markAllAsRead = useCallback(() => {
+    updateNotifications((current) =>
+      current.map((item) => ({ ...item, read: true }))
+    );
+  }, [updateNotifications]);
 
-  // Notifications are created by the backend. This keeps old callers from
-  // crashing: it just re-syncs with the server.
-  const addNotification = () => {
-    loadNotifications();
-  };
+  const deleteNotification = useCallback(
+    (id) => {
+      updateNotifications((current) =>
+        current.filter((item) => String(item.id) !== String(id))
+      );
+    },
+    [updateNotifications]
+  );
 
-  // Backend has no delete endpoint yet, so these are local-only.
-  const deleteNotification = (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
+  const clearNotifications = useCallback(() => {
+    updateNotifications([]);
+  }, [updateNotifications]);
 
-  const clearNotifications = () => {
-    setNotifications([]);
-  };
+  useEffect(() => {
+    const sync = () => loadNotifications();
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+    window.addEventListener("storage", sync);
+    window.addEventListener(UPDATE_EVENT, sync);
+
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(UPDATE_EVENT, sync);
+    };
+  }, [loadNotifications]);
+
+  const unreadCount = notifications.filter((item) => !item.read).length;
+
+  const value = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      storageError,
+      loadNotifications,
+      addNotification,
+      markAsRead,
+      markAllAsRead,
+      deleteNotification,
+      clearNotifications,
+    }),
+    [
+      notifications,
+      unreadCount,
+      storageError,
+      loadNotifications,
+      addNotification,
+      markAsRead,
+      markAllAsRead,
+      deleteNotification,
+      clearNotifications,
+    ]
+  );
 
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        loadNotifications,
-        addNotification,
-        markAsRead,
-        markAllAsRead,
-        deleteNotification,
-        clearNotifications,
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );
@@ -141,11 +152,13 @@ export function NotificationProvider({ children }) {
 
 export function useNotifications() {
   const context = useContext(NotificationContext);
+
   if (!context) {
     throw new Error(
       "useNotifications must be used inside NotificationProvider"
     );
   }
+
   return context;
 }
 

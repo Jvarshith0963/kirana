@@ -2,7 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
+
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 
 const googleClientId =
@@ -18,11 +20,11 @@ ReactDOM.createRoot(
   document.getElementById("root")
 ).render(
   <React.StrictMode>
-    <GoogleOAuthProvider
-      clientId={googleClientId}
-    >
+    <GoogleOAuthProvider clientId={googleClientId}>
       <AuthProvider>
-        <App />
+        <NotificationProvider>
+          <App />
+        </NotificationProvider>
       </AuthProvider>
     </GoogleOAuthProvider>
   </React.StrictMode>
